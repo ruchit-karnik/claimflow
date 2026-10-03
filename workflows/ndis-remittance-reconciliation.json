@@ -1,0 +1,312 @@
+{
+  "name": "NDIS Remittance Reconciliation",
+  "nodes": [
+    {
+      "id": "9a847e54-85b9-45da-8f59-030d55a7b7d1",
+      "name": "Payment Results Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "formTitle": "NDIS Payment Results Upload",
+        "formDescription": "Drop the bulk payment results file you downloaded from the myplace provider portal / PACE. Reconciliation runs automatically and you will receive a summary email.",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "file",
+              "fieldLabel": "Payment results file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".csv",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Upload results",
+          "path": "ndis-payment-results",
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "Results received — reconciliation is running. A summary email is on its way."
+            }
+          }
+        }
+      },
+      "webhookId": "22e86624-dac7-4f99-b4e9-89e4dbefe7ee"
+    },
+    {
+      "id": "775bee60-de97-4451-a381-900926891af2",
+      "name": "Extract Payment Results",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "={{ Object.keys($binary)[0] }}",
+        "destinationKey": "data"
+      }
+    },
+    {
+      "id": "28a39a63-55e9-454d-81be-c0a017746e95",
+      "name": "Fetch Claims Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "46693a91-4c0e-4520-b698-34b09013ed7a",
+      "name": "Reconcile Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst ledgerRows = $('Fetch Claims Ledger').all().map(i => i.json);\n\nlet text = String($('Extract Payment Results').first().json.data ?? '');\nif (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);\n\n// Tolerant CSV parsing: handles quote-wrapped whole rows (Excel artifacts), blank lines, any line endings\nfunction splitCsv(line) {\n  const fields = [];\n  let cur = '';\n  let inQ = false;\n  for (let i = 0; i < line.length; i++) {\n    const c = line[i];\n    if (inQ) {\n      if (c === '\\\"') {\n        if (line[i + 1] === '\\\"') { cur += '\\\"'; i++; } else { inQ = false; }\n      } else { cur += c; }\n    } else {\n      if (c === '\\\"') { inQ = true; }\n      else if (c === ',') { fields.push(cur); cur = ''; }\n      else { cur += c; }\n    }\n  }\n  fields.push(cur);\n  return fields.map(f => f.trim());\n}\n\nconst lines = text.split(/\\r\\n|\\r|\\n/).map(l => l.trim()).filter(l => l.length > 0);\nconst cleaned = [];\nfor (const l of lines) {\n  let s = l;\n  if (s.length > 1 && s.startsWith('\\\"') && s.endsWith('\\\"') && s.slice(1, -1).indexOf('\\\"') === -1) {\n    s = s.slice(1, -1);\n  }\n  cleaned.push(s);\n}\nif (cleaned.length < 2) return [];\n\nconst header = splitCsv(cleaned[0]);\nconst results = [];\nfor (let li = 1; li < cleaned.length; li++) {\n  const fields = splitCsv(cleaned[li]);\n  if (fields.every(f => f === '')) continue;\n  const row = {};\n  for (let fi = 0; fi < header.length; fi++) { row[header[fi]] = fields[fi] ?? ''; }\n  results.push(row);\n}\n\nconst ledgerByRef = {};\nfor (const r of ledgerRows) { ledgerByRef[String(r.claim_reference).trim()] = r; }\n\nconst out = [];\nfor (const row of results) {\n  // Tolerant header matching: works across portal results file layout variations\n  const lookup = {};\n  for (const k of Object.keys(row)) { lookup[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[k]; }\n\n  const claimRef = String(lookup.claimreference ?? lookup.claimref ?? '').trim();\n  const statusRaw = String(lookup.status ?? lookup.outcome ?? lookup.paymentstatus ?? lookup.claimstatus ?? '').toLowerCase();\n  const paidAmount = Number(String(lookup.paidamount ?? lookup.amountpaid ?? lookup.paid ?? '0').replace(/[^0-9.-]/g, '')) || 0;\n  const reason = String(lookup.errormessage ?? lookup.rejectionreason ?? lookup.reason ?? lookup.comments ?? lookup.error ?? '').trim();\n\n  let outcome = 'unknown';\n  if (statusRaw.includes('reject') || statusRaw.includes('error') || statusRaw.includes('cancel') || statusRaw.includes('fail')) outcome = 'rejected';\n  else if (statusRaw.includes('paid') || statusRaw.includes('approv') || statusRaw.includes('accept') || statusRaw.includes('success') || statusRaw.includes('complete')) outcome = 'paid';\n  else if (paidAmount > 0) outcome = 'paid';\n\n  const ledger = ledgerByRef[claimRef];\n\n  out.push({ json: {\n    claim_reference: claimRef || '(missing claim reference)',\n    matched: !!ledger,\n    outcome: outcome,\n    paid_amount: outcome === 'paid' ? (paidAmount || Number(ledger ? ledger.total : 0) || 0) : 0,\n    paid_date: outcome === 'paid' ? $today.toFormat('yyyy-MM-dd') : '',\n    rejection_reason: outcome === 'rejected' ? (reason || 'No reason given in results file') : '',\n    participant_name: ledger ? ledger.participant_name : '',\n    claimed_total: ledger ? ledger.total : ''\n  }});\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "020b62cc-74e7-43ca-ae34-3e4737ded877",
+      "name": "Keep Matched Outcomes",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.matched }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "leftValue": "={{ $json.outcome }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "unknown"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "894d8c8b-bc5a-4c6c-9726-6fa2446cac29",
+      "name": "Update Ledger Outcome",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "condition": "eq",
+              "keyValue": "={{ $json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "status": "={{ $json.outcome }}",
+            "paid_amount": "={{ $json.paid_amount }}",
+            "paid_date": "={{ $json.paid_date }}",
+            "rejection_reason": "={{ $json.rejection_reason }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "dcf22329-7e04-4642-8cfe-3a8dcaca8ab4",
+      "name": "Build Outcome Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst rows = $('Reconcile Results').all().map(i => i.json);\nconst paid = rows.filter(r => r.matched && r.outcome === 'paid');\nconst rejected = rows.filter(r => r.matched && r.outcome === 'rejected');\nconst problems = rows.filter(r => !r.matched || r.outcome === 'unknown');\n\nlet paidTotal = 0;\nfor (const p of paid) { paidTotal += Number(p.paid_amount) || 0; }\npaidTotal = Math.round(paidTotal * 100) / 100;\n\nlet html = '<h2>NDIS payment results processed</h2>';\nhtml += '<p><b>' + paid.length + '</b> claims paid totalling <b>$' + paidTotal.toFixed(2) + '</b> · <b>' + rejected.length + '</b> rejected · <b>' + problems.length + '</b> needing attention.</p>';\n\nif (rejected.length) {\n  html += '<h3>Rejected — resubmission queue</h3><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim</th><th>Participant</th><th>Reason</th></tr>';\n  for (const r of rejected) { html += '<tr><td>' + r.claim_reference + '</td><td>' + (r.participant_name || 'Unknown') + '</td><td>' + r.rejection_reason + '</td></tr>'; }\n  html += '</table><p>These are flagged as rejected in the claims ledger. Fix the cause, then re-invoice in the PMS so they enter the next daily batch.</p>';\n}\n\nif (problems.length) {\n  html += '<h3>Needs attention (unmatched or unclear outcome)</h3><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim reference in file</th><th>Issue</th></tr>';\n  for (const u of problems) { html += '<tr><td>' + u.claim_reference + '</td><td>' + (u.matched ? 'Outcome column unclear' : 'No matching claim in the ledger') + '</td></tr>'; }\n  html += '</table>';\n}\n\nif (paid.length) {\n  html += '<h3>Paid</h3><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim</th><th>Participant</th><th>Paid</th></tr>';\n  for (const p of paid) { html += '<tr><td>' + p.claim_reference + '</td><td>' + (p.participant_name || '') + '</td><td>$' + Number(p.paid_amount).toFixed(2) + '</td></tr>'; }\n  html += '</table>';\n}\n\nreturn [{ json: { html: html, paid_count: paid.length, rejected_count: rejected.length, problem_count: problems.length, paid_total: paidTotal.toFixed(2) } }];\n"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "80b68f60-5a67-44bc-8bb5-3be378b86e39",
+      "name": "Email Reconciliation Summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1100,
+        440
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS payment results: {{ $json.paid_count }} paid (${{ $json.paid_total }}), {{ $json.rejected_count }} rejected",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "991ce43a-9da2-4eb0-bb02-1fbd0675c6f6"
+    },
+    {
+      "id": "df694e60-56ef-468e-b1f6-11e95cccc86f",
+      "name": "Sticky Note 818a14e9",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -60
+      ],
+      "parameters": {
+        "content": "## Phase 3 — Remittance Reconciliation\n\nAfter uploading the bulk claim CSV to PRODA/myplace, the admin downloads the portal's payment results file and drops it on this form (URL path: /form/ndis-payment-results).\n\nThe workflow matches every row back to the claims ledger by ClaimReference, marks each claim paid (with amount + date) or rejected (with reason), and emails a summary: paid total, rejection/resubmission queue, and anything unmatched. Header names in the results file are matched tolerantly, so minor portal format changes won't break it.",
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "Payment Results Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Extract Payment Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Payment Results": {
+      "main": [
+        [
+          {
+            "node": "Fetch Claims Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Claims Ledger": {
+      "main": [
+        [
+          {
+            "node": "Reconcile Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reconcile Results": {
+      "main": [
+        [
+          {
+            "node": "Keep Matched Outcomes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Outcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Matched Outcomes": {
+      "main": [
+        [
+          {
+            "node": "Update Ledger Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Outcome Email": {
+      "main": [
+        [
+          {
+            "node": "Email Reconciliation Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

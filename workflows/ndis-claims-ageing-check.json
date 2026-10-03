@@ -1,0 +1,150 @@
+{
+  "name": "NDIS Claims Ageing Check",
+  "nodes": [
+    {
+      "id": "1a6a9804-a17b-48ea-a798-cfb40b451711",
+      "name": "Weekly Monday 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "42590dc4-5e93-4b88-bcc6-dd98d457751b",
+      "name": "Fetch Claims Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "c527a955-8e1c-4d9b-9729-ea9fce2261fc",
+      "name": "Find Stale Claims",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst rows = $('Fetch Claims Ledger').all().map(i => i.json);\nconst cutoff = $today.minus({ days: 14 }).toFormat('yyyy-MM-dd');\n\nconst awaiting = rows.filter(r => r.status === 'validated' && String(r.service_date) <= cutoff);\nconst rejected = rows.filter(r => r.status === 'rejected');\n\nif (!awaiting.length && !rejected.length) return [];\n\nlet awaitingTotal = 0;\nfor (const a of awaiting) { awaitingTotal += Number(a.total) || 0; }\nawaitingTotal = Math.round(awaitingTotal * 100) / 100;\n\nlet html = '<h2>NDIS claims ageing report</h2>';\n\nif (awaiting.length) {\n  html += '<h3>' + awaiting.length + ' claims with no payment result after 14+ days ($' + awaitingTotal.toFixed(2) + ' outstanding)</h3>';\n  html += '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim</th><th>Participant</th><th>Type</th><th>Service date</th><th>Amount</th></tr>';\n  for (const a of awaiting) {\n    html += '<tr><td>' + a.claim_reference + '</td><td>' + (a.participant_name || 'Unknown') + '</td><td>' + a.plan_type + '</td><td>' + a.service_date + '</td><td>$' + Number(a.total).toFixed(2) + '</td></tr>';\n  }\n  html += '</table><p>Agency claims: check the batch was uploaded to PRODA and process the results file. Plan/self-managed: chase the plan manager or participant for payment.</p>';\n}\n\nif (rejected.length) {\n  html += '<h3>' + rejected.length + ' rejected claims awaiting resubmission</h3>';\n  html += '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim</th><th>Participant</th><th>Reason</th></tr>';\n  for (const r of rejected) {\n    html += '<tr><td>' + r.claim_reference + '</td><td>' + (r.participant_name || 'Unknown') + '</td><td>' + (r.rejection_reason || '') + '</td></tr>';\n  }\n  html += '</table><p>Fix the cause and re-invoice in the PMS so these enter the next daily batch.</p>';\n}\n\nreturn [{ json: { html: html, awaiting_count: awaiting.length, rejected_count: rejected.length, awaiting_total: awaitingTotal.toFixed(2) } }];\n"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "a5ab6884-ef37-44d2-a6c5-6aff70494df1",
+      "name": "Email Ageing Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS ageing: {{ $json.awaiting_count }} awaiting results (${{ $json.awaiting_total }}), {{ $json.rejected_count }} to resubmit",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "4546f6d8-7d91-4c3a-b797-9c7152baa92e"
+    },
+    {
+      "id": "396b0a95-51d8-4a21-8c9b-9e30a24c1b25",
+      "name": "Sticky Note 438a8485",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -20
+      ],
+      "parameters": {
+        "content": "## Phase 3 — Ageing Watchdog\n\nEvery Monday 9am: scans the claims ledger for (a) claims still without a payment result 14+ days after service — batch may not have been uploaded, or the plan manager / participant hasn't paid — and (b) rejected claims still awaiting resubmission. Emails a chase-up list. Sends nothing when there's nothing stale.",
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 9am": {
+      "main": [
+        [
+          {
+            "node": "Fetch Claims Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Claims Ledger": {
+      "main": [
+        [
+          {
+            "node": "Find Stale Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Stale Claims": {
+      "main": [
+        [
+          {
+            "node": "Email Ageing Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

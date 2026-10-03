@@ -1,0 +1,300 @@
+{
+  "name": "NDIS Claims — API Submission (Simulated)",
+  "nodes": [
+    {
+      "id": "ed9fd2c2-0b28-4d19-bd96-1bdfe71c1949",
+      "name": "Run API Submission",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "153bc915-3c62-48dd-ad64-8a60c0a60000",
+      "name": "Fetch Validated Agency Claims",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "validated"
+            },
+            {
+              "keyName": "plan_type",
+              "condition": "eq",
+              "keyValue": "agency"
+            },
+            {
+              "keyName": "batch_id",
+              "condition": "eq",
+              "keyValue": "BATCH-API-DEMO"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "34a2ca88-b74f-4a51-8f4a-58c6e4e7e1a0",
+      "name": "Build Payment Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst claims = $input.all().map(i => i.json);\nif (!claims.length) return [];\n\nconst payload = claims.map(c => ({\n  claim_reference: c.claim_reference,\n  invoice_number: c.invoice_number,\n  ndis_number: c.ndis_number,\n  support_item_number: c.support_item_number,\n  service_date: c.service_date,\n  quantity: Number(c.quantity) || 1,\n  unit_price: Number(c.unit_price) || 0,\n  total: Number(c.total) || 0\n}));\n\nreturn [{ json: { batch_id: 'API-' + $today.toFormat('yyyyLLdd'), claims: payload } }];\n"
+      }
+    },
+    {
+      "id": "22e65e2b-c0cc-4a22-8033-96a6a0850593",
+      "name": "Submit Payment Requests (NDIA API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR_N8N_INSTANCE/webhook/ndia-mock/payment-requests",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0abcc8d8-06ba-4876-b497-6d9d7768022c",
+      "name": "Apply Outcomes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst res = $input.first().json;\nconst results = Array.isArray(res.results) ? res.results : [];\n\nconst out = [];\nfor (const r of results) {\n  const status = String(r.status || '').toLowerCase();\n  const paid = status.includes('paid') || status.includes('accept') || status.includes('success');\n  out.push({ json: {\n    claim_reference: r.claim_reference,\n    outcome: paid ? 'paid' : 'rejected',\n    payment_request_number: r.payment_request_number || '',\n    paid_amount: paid ? (Number(r.paid_amount) || 0) : 0,\n    paid_date: paid ? $today.toFormat('yyyy-MM-dd') : '',\n    rejection_reason: paid ? '' : (r.error_message || 'Rejected by NDIA')\n  }});\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "1d9fdceb-9c96-4610-9f9b-59435e60ccbf",
+      "name": "Update Ledger Outcome",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "condition": "eq",
+              "keyValue": "={{ $json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "status": "={{ $json.outcome }}",
+            "paid_amount": "={{ $json.paid_amount }}",
+            "paid_date": "={{ $json.paid_date }}",
+            "rejection_reason": "={{ $json.rejection_reason }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "35f54772-fe93-4a58-8bc1-a550d8ec8df8",
+      "name": "Build Submission Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst rows = $('Apply Outcomes').all().map(i => i.json);\nconst paid = rows.filter(r => r.outcome === 'paid');\nconst rejected = rows.filter(r => r.outcome === 'rejected');\n\nlet paidTotal = 0;\nfor (const p of paid) { paidTotal += Number(p.paid_amount) || 0; }\npaidTotal = Math.round(paidTotal * 100) / 100;\n\nlet html = '<h2>NDIS claims submitted via API</h2>';\nhtml += '<p>Submitted ' + rows.length + ' claims directly to the NDIA payment request API. <b>' + paid.length + '</b> paid totalling <b>$' + paidTotal.toFixed(2) + '</b>, <b>' + rejected.length + '</b> rejected. No CSV, no portal upload, no results file - outcomes were applied to the ledger automatically.</p>';\n\nif (rejected.length) {\n  html += '<h3>Rejected — resubmission queue</h3><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Claim</th><th>Reason</th></tr>';\n  for (const r of rejected) { html += '<tr><td>' + r.claim_reference + '</td><td>' + r.rejection_reason + '</td></tr>'; }\n  html += '</table>';\n}\n\nreturn [{ json: { html: html, paid_count: paid.length, rejected_count: rejected.length, paid_total: paidTotal.toFixed(2) } }];\n"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "e059d705-f417-41c5-8a09-09028d9cdf76",
+      "name": "Email API Submission Summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS API submission: {{ $json.paid_count }} paid (${{ $json.paid_total }}), {{ $json.rejected_count }} rejected",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "3a1a798a-5ce6-44a0-8b94-48fd40348c34"
+    },
+    {
+      "id": "10c77947-45db-4626-a97f-bb2e77ef17d2",
+      "name": "Sticky Note d32577e8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -140
+      ],
+      "parameters": {
+        "content": "## The API future-state path (simulated)\n\nWhat the whole claims round-trip looks like WITH NDIA Digital Partnership Office access: validated agency claims go from the ledger straight to the NDIA payment request API and outcomes come back in the same run — replacing the CSV email, the PRODA portal upload, the results file download, and the reconciliation form entirely.\n\nCurrently pointed at the in-instance mock (NDIA API Simulator workflow). To go real once DPO access is granted: change the URL in 'Submit Payment Requests' to the NDIA endpoint and attach the machine-to-machine PRODA credential. Nothing else changes.",
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "Run API Submission": {
+      "main": [
+        [
+          {
+            "node": "Fetch Validated Agency Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Validated Agency Claims": {
+      "main": [
+        [
+          {
+            "node": "Build Payment Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payment Request": {
+      "main": [
+        [
+          {
+            "node": "Submit Payment Requests (NDIA API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Payment Requests (NDIA API)": {
+      "main": [
+        [
+          {
+            "node": "Apply Outcomes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Outcomes": {
+      "main": [
+        [
+          {
+            "node": "Update Ledger Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Ledger Outcome": {
+      "main": [
+        [
+          {
+            "node": "Build Submission Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Submission Summary": {
+      "main": [
+        [
+          {
+            "node": "Email API Submission Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

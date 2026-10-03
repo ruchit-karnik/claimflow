@@ -1,0 +1,202 @@
+{
+  "name": "2.1.1) AHTR Template Loader",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "AHTR Template Loader",
+        "formDescription": "One-time setup: upload the official SIRA AHTR form PDF (downloaded from sira.nsw.gov.au). It is stored in the file_assets data table and used by the AHTR Assistant to produce the filled official form.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Template PDF",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Store template",
+          "path": "ahtr-template-upload",
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Template stored. The AHTR Assistant will now fill the official form."
+            }
+          }
+        }
+      },
+      "id": "de1a162b-c3cd-49ed-b354-8db0a3241506",
+      "name": "Template Upload Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "934e30cf-b7ca-43bc-b8f1-a4d103032bb6"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "binaryPropertyName": "={{ Object.keys($binary)[0] }}",
+        "destinationKey": "b64",
+        "options": {}
+      },
+      "id": "b1c3ba66-9303-4599-af38-aa30db5c05a0",
+      "name": "Extract Base64",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "2Ueq1QxiSmCTB4sL",
+          "cachedResultName": "file_assets"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "name",
+              "keyValue": "SIRA-AHTR-form.pdf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "513a0eb9-e62e-4729-a3b5-ae29e48a5af7",
+      "name": "Clear Old Template",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        304
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst b64 = String($('Extract Base64').first().json.b64 || '');\nif (!b64) return [];\n\nconst CHUNK = 40000;\nconst out = [];\nlet idx = 0;\nfor (let i = 0; i < b64.length; i += CHUNK) {\n  out.push({ json: { name: 'SIRA-AHTR-form.pdf', chunk_index: idx, content_b64: b64.slice(i, i + CHUNK) } });\n  idx++;\n}\nreturn out;\n"
+      },
+      "id": "8f9a79ea-d2d0-46ec-aa7d-f736bb5b8a09",
+      "name": "Split Into Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "2Ueq1QxiSmCTB4sL",
+          "cachedResultName": "file_assets"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [],
+          "value": {
+            "name": "={{ $json.name }}",
+            "chunk_index": "={{ $json.chunk_index }}",
+            "content_b64": "={{ $json.content_b64 }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "8520c2f1-5ff2-459e-81de-b8df50448b42",
+      "name": "Store Chunk",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## AHTR Template Loader (one-time setup)\n\nStores the official SIRA AHTR PDF in the file_assets data table (base64, chunked) so the AHTR Assistant can fill the real form. Needed because SIRA's website blocks server-side downloads (Cloudflare challenge) — a human downloads the form once in a browser and drops it here.\n\nRe-run whenever SIRA updates the form: old chunks are cleared and replaced.",
+        "color": 5
+      },
+      "id": "115dc0cd-ddde-4328-a014-6dff0a2357d1",
+      "name": "Sticky Note c3f757ba",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Template Upload Form": {
+      "main": [
+        [
+          {
+            "node": "Extract Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Base64": {
+      "main": [
+        [
+          {
+            "node": "Clear Old Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Old Template": {
+      "main": [
+        [
+          {
+            "node": "Split Into Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into Chunks": {
+      "main": [
+        [
+          {
+            "node": "Store Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

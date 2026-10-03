@@ -1,0 +1,1457 @@
+{
+  "name": "2.1) AHTR Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Allied Health Treatment Request (AHTR)",
+        "formDescription": "Official SIRA structure. Complete the clinical sections only — worker details, claim details, treatment history, consultation counts, outcome-score history, service codes, costs and practitioner details are merged in automatically from practice records.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Insurer claim number",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "CLM-2026-1001 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1002 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1003 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1004 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1005 - Adam Edwards"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Treating practitioner",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Underdogs Winners"
+                  },
+                  {
+                    "option": "Isaac Newton"
+                  },
+                  {
+                    "option": "Abdul Abdullah"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Allied health discipline",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Physiotherapy"
+                  },
+                  {
+                    "option": "Chiropractic"
+                  },
+                  {
+                    "option": "Osteopathy"
+                  },
+                  {
+                    "option": "Psychology"
+                  },
+                  {
+                    "option": "Exercise physiology"
+                  },
+                  {
+                    "option": "Counselling"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Referred by (optional)",
+              "placeholder": "e.g. Dr J Smith (nominated treating doctor)"
+            },
+            {
+              "fieldLabel": "Referrer phone number (optional)",
+              "placeholder": "e.g. 02 9000 0000"
+            },
+            {
+              "fieldType": "html",
+              "elementName": "s2",
+              "html": "<h3>Section 2 — Your clinical assessment</h3>"
+            },
+            {
+              "fieldLabel": "Compensable injury or illness",
+              "placeholder": "One sentence",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Current clinical signs and symptoms",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Risk screening tool name (optional)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Not applied"
+                  },
+                  {
+                    "option": "Orebro MSQ-SF"
+                  },
+                  {
+                    "option": "Keele STarT Back"
+                  },
+                  {
+                    "option": "Whip-Predict"
+                  },
+                  {
+                    "option": "K10"
+                  },
+                  {
+                    "option": "PCL-5"
+                  },
+                  {
+                    "option": "Other (state in score/comment)"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Risk screening date administered (optional)",
+              "fieldType": "date"
+            },
+            {
+              "fieldLabel": "Risk screening score/comment (optional)",
+              "placeholder": "e.g. 42 - low risk"
+            },
+            {
+              "fieldLabel": "Pre-existing conditions relevant to the injury (optional)",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Pre-injury work hours per week (optional)",
+              "placeholder": "e.g. 38"
+            },
+            {
+              "fieldLabel": "Copy of position description/work duties held? (optional)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Pre-injury capacity - work",
+              "fieldType": "textarea",
+              "placeholder": "Occupation, tasks, days/hours worked",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Pre-injury capacity - usual activities",
+              "fieldType": "textarea",
+              "placeholder": "Activities of daily living, driving, transport, leisure",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Current capacity - work",
+              "fieldType": "textarea",
+              "placeholder": "What the person can do now at work",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Current capacity - usual activities",
+              "fieldType": "textarea",
+              "placeholder": "What the person can do now in daily life",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Standardised outcome measure name",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "PSFS"
+                  },
+                  {
+                    "option": "Oswestry Disability Index"
+                  },
+                  {
+                    "option": "Neck Disability Index"
+                  },
+                  {
+                    "option": "QuickDASH"
+                  },
+                  {
+                    "option": "LEFS"
+                  },
+                  {
+                    "option": "Roland-Morris"
+                  },
+                  {
+                    "option": "DASS-21"
+                  },
+                  {
+                    "option": "K10"
+                  },
+                  {
+                    "option": "Other (state in interpretation)"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Current outcome measure score",
+              "placeholder": "e.g. 3/10",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Interpretation of scores",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldType": "html",
+              "elementName": "s3",
+              "html": "<h3>Section 3 — Barriers to recovery and strategies</h3>"
+            },
+            {
+              "fieldLabel": "Barriers to recovery",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Strategies to address barriers",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Assistance requested from the insurer (optional)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Direct contact from insurer"
+                  },
+                  {
+                    "option": "Case conference"
+                  },
+                  {
+                    "option": "Collaborative case review with independent consultant"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Case conference - who with (optional)",
+              "placeholder": "e.g. insurer case manager, employer, nominated treating doctor"
+            },
+            {
+              "fieldType": "html",
+              "elementName": "s4",
+              "html": "<h3>Section 4 — Treatment plan</h3>"
+            },
+            {
+              "fieldLabel": "Achievement of previous goals (optional)",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "First request under this approval"
+                  },
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "Partially"
+                  },
+                  {
+                    "option": "No"
+                  },
+                  {
+                    "option": "N/A"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Work goal",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Activity/participation goal",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Self-management strategies",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Evidence-based intervention approach and rationale",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Anticipated discharge date",
+              "fieldType": "date",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Developed collaboratively with the injured person?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Yes"
+                  },
+                  {
+                    "option": "No"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldType": "html",
+              "elementName": "s5",
+              "html": "<h3>Section 5 — Service requested</h3>"
+            },
+            {
+              "fieldLabel": "Service requested",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Physiotherapy consultations"
+                  },
+                  {
+                    "option": "Initial consultation"
+                  },
+                  {
+                    "option": "Telehealth consultations"
+                  },
+                  {
+                    "option": "Case conference"
+                  },
+                  {
+                    "option": "Home visit consultations"
+                  },
+                  {
+                    "option": "Aids or equipment"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Number of sessions requested",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "1"
+                  },
+                  {
+                    "option": "2"
+                  },
+                  {
+                    "option": "3"
+                  },
+                  {
+                    "option": "4"
+                  },
+                  {
+                    "option": "5"
+                  },
+                  {
+                    "option": "6"
+                  },
+                  {
+                    "option": "7"
+                  },
+                  {
+                    "option": "8"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Frequency / timeframe",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Weekly for 4 weeks"
+                  },
+                  {
+                    "option": "Weekly for 6 weeks"
+                  },
+                  {
+                    "option": "Weekly for 8 weeks"
+                  },
+                  {
+                    "option": "2x weekly for 3 weeks"
+                  },
+                  {
+                    "option": "2x weekly for 4 weeks"
+                  },
+                  {
+                    "option": "Fortnightly for 8 weeks"
+                  },
+                  {
+                    "option": "As clinically required within 8 weeks"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Submit AHTR",
+          "path": "ahtr-request",
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "AHTR assembled on the official SIRA form and sent to the insurer (copy to the clinic inbox)."
+            }
+          }
+        }
+      },
+      "id": "ba07c309-3a98-46f4-8f34-d6c5ccbf86c1",
+      "name": "AHTR Clinical Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        208
+      ],
+      "webhookId": "b2801938-2d4e-454b-8464-89d980775da7"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_number",
+              "keyValue": "={{ $json['Insurer claim number'].split(' - ')[0] }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "6b827430-d4d1-46a2-8e01-cf9f8754d1c4",
+      "name": "Find Funding Profile",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        208
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.claim_number }}",
+              "operator": {
+                "type": "string",
+                "operation": "exists"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9711ed61-7dc1-471b-9ff7-fd568eb58601",
+      "name": "Profile Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_id",
+              "keyValue": "={{ $('Find Funding Profile').first().json.patient_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "b304e57d-f5ff-4acd-a0e3-53940ea8f2e8",
+      "name": "Fetch Treatment History",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1296,
+        64
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst form = $('AHTR Clinical Form').first().json;\nconst profile = $('Find Funding Profile').first().json;\nconst patient = $('Fetch Patient Record').first().json;\nconst fees = $('Fetch Fee Schedule').all().map(i => i.json);\nconst pracItem = $('Fetch Practitioner').first();\nconst prac = pracItem ? (pracItem.json || {}) : {};\nconst history = $input.all().map(i => i.json)\n  .filter(r => r.funder === 'workers_comp' || r.funder === 'ctp')\n  .sort((a, b) => String(a.service_date).localeCompare(String(b.service_date)));\n\nfunction f(key) { return form[key] || '-'; }\nfunction p(key) { return prac[key] || ''; }\nfunction clean(s) { return String(s || '').replace(/\\s*\\(TEST\\)/gi, '').trim(); }\nfunction row(label, value) { return '<tr><th style=\"text-align:left;width:280px\">' + label + '</th><td>' + (value || '-') + '</td></tr>'; }\nfunction table(rows) { return '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;margin-bottom:12px\">' + rows + '</table>'; }\nfunction dmy(iso) {\n  const s = String(iso || '').slice(0, 10);\n  const pt = s.split('-');\n  return pt.length === 3 ? pt[2] + '/' + pt[1] + '/' + pt[0] : (iso ? String(iso) : '');\n}\n\nconst delivered = history.filter(r => r.status === 'validated' || r.status === 'paid');\nlet totalConsults = 0;\nfor (const d of delivered) { totalConsults += Number(d.quantity) || 0; }\nconst firstDate = delivered.length ? delivered[0].service_date : '';\n\nconst feeMap = {};\nfor (const fe of fees) { feeMap[String(fe.item_code).trim().toUpperCase()] = fe; }\nconst lastDelivered = delivered.length ? delivered[delivered.length - 1] : null;\nconst svcCode = lastDelivered ? String(lastDelivered.support_item_number || '').toUpperCase() : '';\nconst feeRow = svcCode ? feeMap[svcCode] : null;\nconst sessionsN = Number(form['Number of sessions requested']) || 0;\nconst costPer = feeRow ? Number(feeRow.rate) : null;\nconst totalCost = (costPer !== null && sessionsN > 0) ? (costPer * sessionsN) : null;\n\nconst claimDigits = String(profile.claim_number || '').replace(/[^0-9]/g, '');\nconst requestNo = 'AHTR-' + $today.toFormat('yyyyLLdd') + '-' + (claimDigits.slice(-4) || '0000');\n\nconst outcomeCurrent = f('Current outcome measure score');\nconst outcomeInitial = profile.outcome_initial_score || outcomeCurrent;\nconst outcomePrevious = profile.outcome_previous_score || '';\n\nconst disciplineMap = {\n  'Physiotherapy': 'Physiotherapist',\n  'Chiropractic': 'Chiropractor',\n  'Osteopathy': 'Osteopath',\n  'Psychology': 'Psychologist',\n  'Exercise physiology': 'Accredited Exercise Physiologist',\n  'Counselling': 'Counsellor'\n};\nconst disciplinePdf = disciplineMap[form['Allied health discipline']] || 'Other (please specify)';\n\nconst asstRaw = form['Assistance requested from the insurer (optional)'];\nconst asstList = Array.isArray(asstRaw) ? asstRaw : (asstRaw && asstRaw !== 'None' ? [String(asstRaw)] : []);\nconst asstJoined = asstList.join(', ');\nconst asstLower = asstJoined.toLowerCase();\nconst asstDirect = asstLower.includes('direct contact') ? 'Yes' : '';\nconst asstCase = asstLower.includes('case conference') ? 'Yes' : '';\nconst asstCollab = asstLower.includes('collaborative') ? 'Yes' : '';\nconst caseWho = form['Case conference - who with (optional)'] || '';\nconst goalsRaw = form['Achievement of previous goals (optional)'] || 'First request under this approval';\nconst goalsBox = goalsRaw === 'First request under this approval' ? 'N/A' : goalsRaw;\nconst riskApplied = (form['Risk screening tool name (optional)'] && form['Risk screening tool name (optional)'] !== 'Not applied') ? 'Yes' : 'No';\nconst collabBox = form['Developed collaboratively with the injured person?'] || '';\nconst posDesc = form['Copy of position description/work duties held? (optional)'] || '';\n\nlet historyRows = '';\nfor (const h of history) {\n  historyRows += '<tr><td>' + h.service_date + '</td><td>' + h.support_item_number + '</td><td>' + h.status + '</td><td>$' + Number(h.total).toFixed(2) + '</td></tr>';\n}\nif (!historyRows) historyRows = '<tr><td colspan=\"4\">No prior treatment recorded</td></tr>';\n\nlet html = '<h1>Allied Health Treatment Request (AHTR)</h1>';\nhtml += '<p><i>Structured per the SIRA Allied Health Treatment Request. Clinical sections authored by the treating practitioner; administrative data drawn from practice records.</i></p>';\n\nhtml += table(\n  row('Request number', requestNo) +\n  row('Date of request', $today.toFormat('yyyy-MM-dd')) +\n  row('Date services first commenced', firstDate || '-') +\n  row('Total number of consultations to date', String(totalConsults)) +\n  row('Allied health discipline', f('Allied health discipline')) +\n  row('Referred by', form['Referred by (optional)'] || profile.referred_by || '-') +\n  row('Referrer phone', form['Referrer phone number (optional)'] || '-')\n);\n\nhtml += '<h2>Section 1 — Injured person details</h2>';\nhtml += table(\n  row('Name', profile.patient_name) +\n  row('Date of birth', patient.date_of_birth || '-') +\n  row('Pre-injury occupation', patient.occupation || '-') +\n  row('Pre-injury work hours per week', form['Pre-injury work hours per week (optional)'] || '-') +\n  row('Claim number', profile.claim_number) +\n  row('Date of injury/accident', profile.date_of_injury || '-')\n);\n\nhtml += '<h2>Section 2 — Clinical assessment</h2>';\nhtml += table(\n  row('Compensable injury or illness', f('Compensable injury or illness')) +\n  row('Current clinical signs and symptoms', f('Current clinical signs and symptoms')) +\n  row('Risk screening applied', riskApplied) +\n  row('Risk screening tool', form['Risk screening tool name (optional)'] || 'Not applied') +\n  row('Risk screening date', form['Risk screening date administered (optional)'] ? dmy(form['Risk screening date administered (optional)']) : '-') +\n  row('Risk screening score/comment', form['Risk screening score/comment (optional)'] || '-') +\n  row('Pre-existing conditions', form['Pre-existing conditions relevant to the injury (optional)'] || 'Nil relevant') +\n  row('Copy of position description/work duties held', posDesc || '-') +\n  row('Pre-injury capacity — work', f('Pre-injury capacity - work')) +\n  row('Pre-injury capacity — usual activities', f('Pre-injury capacity - usual activities')) +\n  row('Current capacity — work', f('Current capacity - work')) +\n  row('Current capacity — usual activities', f('Current capacity - usual activities'))\n);\nhtml += '<h3>Standardised outcome measures</h3>';\nhtml += table(\n  row('Outcome measure', f('Standardised outcome measure name')) +\n  row('Initial score', outcomeInitial + (profile.outcome_initial_score ? '' : ' (baseline — first request)')) +\n  row('Previous score', outcomePrevious || '-') +\n  row('Current score', outcomeCurrent) +\n  row('Interpretation of scores', f('Interpretation of scores'))\n);\n\nhtml += '<h2>Section 3 — Barriers to recovery and strategies</h2>';\nhtml += table(\n  row('Barriers identified', f('Barriers to recovery')) +\n  row('Strategies to address barriers', f('Strategies to address barriers')) +\n  row('Assistance requested', asstJoined || 'None') +\n  row('Case conference — who with', caseWho || '-')\n);\n\nhtml += '<h2>Section 4 — Treatment plan</h2>';\nhtml += table(\n  row('Achievement of previous goals', goalsRaw) +\n  row('Work goal', f('Work goal')) +\n  row('Activity/participation goal', f('Activity/participation goal')) +\n  row('Self-management strategies', f('Self-management strategies')) +\n  row('Evidence-based intervention approach and rationale', f('Evidence-based intervention approach and rationale')) +\n  row('Anticipated discharge date', f('Anticipated discharge date')) +\n  row('Developed collaboratively with the injured person', collabBox || '-')\n);\n\nhtml += '<h2>Section 5 — Service requested</h2>';\nhtml += table(\n  row('Service type', f('Service requested')) +\n  row('Number of sessions', f('Number of sessions requested')) +\n  row('Frequency / timeframe', f('Frequency / timeframe')) +\n  row('Service code', svcCode || '-') +\n  row('Cost per session', costPer !== null ? '$' + costPer.toFixed(2) : '-') +\n  row('Total cost', totalCost !== null ? '$' + totalCost.toFixed(2) : '-')\n);\n\nhtml += '<h2>Section 6 — Practitioner details</h2>';\nhtml += table(\n  row('Treating practitioner', clean(p('practitioner_name')) || '[Set the default row in the practitioners table]') +\n  row('AHPRA number', p('ahpra_number')) +\n  row('SIRA approval number', p('sira_approval_number')) +\n  row('Practice name', clean(p('practice_name'))) +\n  row('Practice email', p('practice_email')) +\n  row('Practitioner email', p('practitioner_email')) +\n  row('Phone / fax', (p('phone') || '-') + ' / ' + (p('fax') || '-')) +\n  row('Suburb / state / postcode', (p('suburb') || '-') + ' ' + (p('state') || '') + ' ' + (p('postcode') || '')) +\n  row('Best time to contact', p('best_contact'))\n);\n\nhtml += '<h2>Appendix — Treatment delivered under this claim</h2>';\nhtml += '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Date</th><th>Service</th><th>Status</th><th>Amount</th></tr>' + historyRows + '</table>';\nhtml += '<p>Please review and confirm approval to the clinic, quoting a new approval reference.</p>';\n\nconst pdf = {\n  req_no: requestNo,\n  date_req: dmy($today.toFormat('yyyy-MM-dd')),\n  date_first: firstDate ? dmy(firstDate) : '',\n  consults: String(totalConsults),\n  discipline: disciplinePdf,\n  referred: form['Referred by (optional)'] || profile.referred_by || '',\n  ref_phone: form['Referrer phone number (optional)'] || '',\n  name: profile.patient_name || '',\n  dob: dmy(patient.date_of_birth),\n  occupation: patient.occupation || '',\n  hours: form['Pre-injury work hours per week (optional)'] || '',\n  claim: profile.claim_number || '',\n  injury_date: dmy(profile.date_of_injury),\n  injury: f('Compensable injury or illness'),\n  symptoms: f('Current clinical signs and symptoms'),\n  risk_tool: form['Risk screening tool name (optional)'] || '',\n  risk_date: form['Risk screening date administered (optional)'] ? dmy(form['Risk screening date administered (optional)']) : '',\n  risk_score: form['Risk screening score/comment (optional)'] || '',\n  preexisting: form['Pre-existing conditions relevant to the injury (optional)'] || 'Nil relevant',\n  cap_pre_work: f('Pre-injury capacity - work'),\n  cap_pre_act: f('Pre-injury capacity - usual activities'),\n  cap_cur_work: f('Current capacity - work'),\n  cap_cur_act: f('Current capacity - usual activities'),\n  som_name: f('Standardised outcome measure name'),\n  som_init: outcomeInitial,\n  som_prev: outcomePrevious,\n  som_cur: outcomeCurrent,\n  interp: f('Interpretation of scores'),\n  barriers: f('Barriers to recovery'),\n  strategies: f('Strategies to address barriers'),\n  work_goal: f('Work goal'),\n  act_goal: f('Activity/participation goal'),\n  selfman: f('Self-management strategies'),\n  intervention: f('Evidence-based intervention approach and rationale'),\n  sessions: f('Number of sessions requested'),\n  discharge: dmy(form['Anticipated discharge date']),\n  service: f('Service requested'),\n  frequency: f('Frequency / timeframe'),\n  svc_code: svcCode,\n  cost_per: costPer !== null ? costPer.toFixed(2) : '',\n  total_cost: totalCost !== null ? totalCost.toFixed(2) : '',\n  risk_applied: riskApplied,\n  pos_desc: posDesc,\n  goals_box: goalsBox,\n  collab: collabBox,\n  asst_direct: asstDirect,\n  asst_case: asstCase,\n  asst_collab: asstCollab,\n  case_who: caseWho,\n  pr_name: clean(p('practitioner_name')),\n  pr_ahpra: p('ahpra_number'),\n  pr_sira: p('sira_approval_number'),\n  pr_practice: clean(p('practice_name')),\n  pr_prac_email: p('practice_email'),\n  pr_email: p('practitioner_email'),\n  pr_phone: p('phone'),\n  pr_fax: p('fax'),\n  pr_suburb: p('suburb'),\n  pr_state: p('state'),\n  pr_postcode: p('postcode'),\n  pr_best: p('best_contact')\n};\n\nreturn [{ json: {\n  html: html,\n  pdf: pdf,\n  insurer_email: profile.insurer_email || '',\n  claim_number: profile.claim_number || '',\n  patient_name: profile.patient_name || '',\n  sessions_requested: form['Number of sessions requested'] || '',\n  outcome_name: form['Standardised outcome measure name'] || '',\n  outcome_current: outcomeCurrent,\n  outcome_initial_new: profile.outcome_initial_score || outcomeCurrent\n} }];\n"
+      },
+      "id": "3912b2f2-ee49-455e-8d79-568f4a9fce08",
+      "name": "Assemble AHTR Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        64
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Assemble AHTR Document').first().json.insurer_email }}",
+        "subject": "=Allied Health Treatment Request — claim {{ $('Assemble AHTR Document').first().json.claim_number }} ({{ $('Assemble AHTR Document').first().json.patient_name }}), {{ $('Assemble AHTR Document').first().json.sessions_requested }} sessions requested",
+        "message": "=<p><b>The completed official SIRA AHTR form is attached.</b> All applicable checkboxes are pre-completed from the clinical answers — before submission the practitioner should review the form and sign it. A full text summary follows.</p>{{ $('Assemble AHTR Document').first().json.html }}",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          },
+          "ccList": "admin@example.com"
+        }
+      },
+      "id": "b7764b68-72f6-445f-ad39-d73dbd65336e",
+      "name": "Email AHTR to Insurer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1664,
+        304
+      ],
+      "webhookId": "2d587d5c-8bb4-44ac-b5b0-a47ebed36378"
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=AHTR form submitted for unknown claim: {{ $('AHTR Clinical Form').first().json['Insurer claim number'] }}",
+        "message": "=<p>An AHTR was submitted for claim number <b>{{ $('AHTR Clinical Form').first().json['Insurer claim number'] }}</b> but no matching funding profile exists. The document was NOT sent to any insurer. Add the profile in the funding_profiles table, then resubmit the form.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e0ea8849-c726-4cb2-aad6-9a48a451a84e",
+      "name": "Claim Not Found Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        320
+      ],
+      "webhookId": "7b63019f-16c4-4468-bbfb-3b1a4944d416"
+    },
+    {
+      "parameters": {
+        "formTitle": "Record AHTR Approval",
+        "formDescription": "When the insurer approves an AHTR, record it here. The funding profile is updated instantly: new approval reference, fresh session count, and claiming resumes automatically.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Insurer claim number",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "CLM-2026-1001 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1002 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1003 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1004 - Adam Edwards"
+                  },
+                  {
+                    "option": "CLM-2026-1005 - Adam Edwards"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "New approval reference",
+              "placeholder": "e.g. AHTR-9001",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Sessions approved",
+              "fieldType": "number",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Approval expiry",
+              "fieldType": "date",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Record approval",
+          "path": "ahtr-approval",
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Approval recorded — the session counter has been reset and claiming resumes automatically."
+            }
+          }
+        }
+      },
+      "id": "645bbf47-6938-4408-b3de-00ac5d64adc9",
+      "name": "AHTR Approval Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        560
+      ],
+      "webhookId": "8a8b955e-8a70-499d-b445-e377e1d130a0"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_number",
+              "keyValue": "={{ $json['Insurer claim number'].split(' - ')[0] }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_number"
+          ],
+          "schema": [],
+          "value": {
+            "approval_reference": "={{ $json['New approval reference'] }}",
+            "sessions_approved": "={{ $json['Sessions approved'] }}",
+            "sessions_used": 0,
+            "approval_expiry": "={{ $json['Approval expiry'] }}",
+            "active": "yes"
+          }
+        },
+        "options": {}
+      },
+      "id": "2a3d3023-6a13-48de-89f8-f27ab45c386c",
+      "name": "Apply New Approval",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=AHTR approval recorded: {{ $json.approval_reference }} for claim {{ $json.claim_number }}",
+        "message": "=<p>The funding profile for claim <b>{{ $json.claim_number }}</b> ({{ $json.patient_name }}) has been updated:</p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>New approval</th><td>{{ $json.approval_reference }}</td></tr><tr><th>Sessions</th><td>0 of {{ $json.sessions_approved }} used</td></tr><tr><th>Expires</th><td>{{ $json.approval_expiry }}</td></tr></table><p>Claiming for this worker resumes automatically on the next intake run.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "066145a6-0570-42d7-ae24-5c1af2cbe859",
+      "name": "Confirm Approval Recorded",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        560
+      ],
+      "webhookId": "f5b677be-923a-4c6d-88ab-72006d8f9364"
+    },
+    {
+      "parameters": {
+        "content": "## AHTR Assistant\n\nAutomates ~45% of the Allied Health Treatment Request cycle while keeping the clinical authorship human:\n\n1. The AHTR renewal alert (from the workers comp workflow) tells the practitioner an AHTR is due.\n2. Practitioner opens /form/ahtr-request and types ONLY the clinical sections (diagnosis, treatment plan, goals, outcomes, sessions requested).\n3. This workflow merges in everything else — worker, claim, insurer, current approval, full treatment history from the ledger — and emails the assembled AHTR to the insurer (clinic CC'd). Unknown claim numbers are bounced to the admin instead.\n4. When the insurer approves, /form/ahtr-approval records the new reference + session count: the profile resets (0 used) and claiming resumes automatically.\n\nBefore go-live: set the practitioner name / AHPRA / SIRA numbers in the Assemble AHTR Document node.",
+        "color": 6
+      },
+      "id": "3abb5667-225d-47b1-8558-6de25e1a6cfe",
+      "name": "Sticky Note 5d4358b4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.au5.cliniko.com/v1/patients/{{ $('Find Funding Profile').first().json.patient_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7c1c7b31-58c5-4dba-a338-357fde62cf2d",
+      "name": "Fetch Patient Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        640,
+        64
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_number",
+              "keyValue": "={{ $('Assemble AHTR Document').first().json.claim_number }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_number"
+          ],
+          "schema": [],
+          "value": {
+            "outcome_measure_name": "={{ $('Assemble AHTR Document').first().json.outcome_name }}",
+            "outcome_initial_score": "={{ $('Assemble AHTR Document').first().json.outcome_initial_new }}",
+            "outcome_previous_score": "={{ $('Assemble AHTR Document').first().json.outcome_current }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "4d509da7-b112-4f26-8197-bba9eb0c15a1",
+      "name": "Update Outcome History",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1856,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "Fill a PDF Form",
+        "url": "https://YOUR_N8N_INSTANCE/webhook/ahtr-template",
+        "fields": {
+          "metadataValues": [
+            {
+              "fieldName": "Text Field 2",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.req_no }}"
+            },
+            {
+              "fieldName": "Text Field 145",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.date_req }}"
+            },
+            {
+              "fieldName": "Text Field 4",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.date_first }}"
+            },
+            {
+              "fieldName": "Text Field 5",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.consults }}"
+            },
+            {
+              "fieldName": "Combo Box 1",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.discipline }}"
+            },
+            {
+              "fieldName": "Text Field 157",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.referred }}"
+            },
+            {
+              "fieldName": "Text Field 158",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.ref_phone }}"
+            },
+            {
+              "fieldName": "Text Field 6",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.name }}"
+            },
+            {
+              "fieldName": "Text Field 146",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.dob }}"
+            },
+            {
+              "fieldName": "Text Field 7",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.occupation }}"
+            },
+            {
+              "fieldName": "Text Field 147",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.hours }}"
+            },
+            {
+              "fieldName": "Text Field 8",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.claim }}"
+            },
+            {
+              "fieldName": "Text Field 148",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.injury_date }}"
+            },
+            {
+              "fieldName": "Text Field 17",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.injury }}"
+            },
+            {
+              "fieldName": "Text Field 16",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.symptoms }}"
+            },
+            {
+              "fieldName": "Check Box 29",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.risk_applied }}"
+            },
+            {
+              "fieldName": "Text Field 18",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.risk_tool }}"
+            },
+            {
+              "fieldName": "Text Field 154",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.risk_date }}"
+            },
+            {
+              "fieldName": "Text Field 149",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.risk_score }}"
+            },
+            {
+              "fieldName": "Text Field 155",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.preexisting }}"
+            },
+            {
+              "fieldName": "Check Box 5",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pos_desc }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 168",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.cap_pre_work }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 169",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.cap_pre_act }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 170",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.cap_cur_work }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 171",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.cap_cur_act }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 172",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.som_name }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 174",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.som_init }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 176",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.som_prev }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 177",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.date_req }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 178",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.som_cur }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 191",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.interp }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 49",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.barriers }}",
+              "pages": "1"
+            },
+            {
+              "fieldName": "Text Field 48",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.strategies }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Check Box 9",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.asst_direct }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Check Box 10",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.asst_case }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 50",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.case_who }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Check Box 11",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.asst_collab }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Check Box 15",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.goals_box === 'Yes' ? 'true' : 'false' }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 54",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.work_goal }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 116",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.act_goal }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 192",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.selfman }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 193",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.intervention }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 194",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.intervention }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 195",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.sessions }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 196",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.discharge }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Check Box 27",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.collab === 'Yes' ? 'true' : 'false' }}",
+              "pages": "2"
+            },
+            {
+              "fieldName": "Text Field 199",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.service }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 225",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.sessions }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 220",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.frequency }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 215",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.svc_code }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 210",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.cost_per }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 204",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.total_cost }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 209",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.total_cost }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 91",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_name }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 92",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_ahpra }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 100",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_sira }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 93",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_practice }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 96",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_prac_email }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 101",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_email }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 94",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_suburb }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 97",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_state }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 98",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_postcode }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 95",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_phone }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 99",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_fax }}",
+              "pages": "3"
+            },
+            {
+              "fieldName": "Text Field 161",
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pr_best }}",
+              "pages": "3"
+            }
+          ]
+        },
+        "advancedOptions": {
+          "name": "=AHTR_{{ $('Assemble AHTR Document').first().json.claim_number }}.pdf"
+        }
+      },
+      "id": "8beb59eb-73a2-4844-8b2d-a67fc2f2dd17",
+      "name": "Fill Official AHTR",
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "6024a074-52fb-4821-927c-f1f9c6cbacf1",
+      "name": "Download Filled AHTR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1472,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gDJPrFlRPD3ZxDZx",
+          "cachedResultName": "insurer_fee_schedule"
+        },
+        "returnAll": true
+      },
+      "id": "7176ec7e-504b-4abe-88ba-4b9695b1b20c",
+      "name": "Fetch Fee Schedule",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        864,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "hQ85263caQ3REz6q",
+          "cachedResultName": "practitioners"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "practitioner_name",
+              "keyValue": "={{ $('AHTR Clinical Form').first().json['Treating practitioner'] }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "b7f51125-1153-4e87-9a74-f89a7d4a6c9e",
+      "name": "Fetch Practitioner",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "Add Text/Images to PDF",
+        "url": "={{ $json.url }}",
+        "annotations": {
+          "metadataValues": [
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.goals_box === 'No' ? 'X' : ' ' }}",
+              "x": "103",
+              "y": "240.5",
+              "size": "10",
+              "fontBold": true,
+              "pages": "2"
+            },
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.goals_box === 'Partially' ? 'X' : ' ' }}",
+              "x": "175",
+              "y": "240.5",
+              "size": "10",
+              "fontBold": true,
+              "pages": "2"
+            },
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.goals_box === 'N/A' ? 'X' : ' ' }}",
+              "x": "283",
+              "y": "240.5",
+              "size": "10",
+              "fontBold": true,
+              "pages": "2"
+            },
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.collab === 'No' ? 'X' : ' ' }}",
+              "x": "499",
+              "y": "727.5",
+              "size": "10",
+              "fontBold": true,
+              "pages": "2"
+            },
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.risk_applied === 'No' ? 'X' : ' ' }}",
+              "x": "391",
+              "y": "695",
+              "size": "10",
+              "fontBold": true
+            },
+            {
+              "text": "={{ $('Assemble AHTR Document').first().json.pdf.pos_desc === 'No' ? 'X' : ' ' }}",
+              "x": "103",
+              "y": "59.5",
+              "size": "10",
+              "fontBold": true,
+              "pages": "1"
+            }
+          ]
+        },
+        "advancedOptions": {
+          "name": "=AHTR_{{ $('Assemble AHTR Document').first().json.claim_number }}.pdf"
+        }
+      },
+      "id": "b0d9652f-c1d7-4f33-b2b1-6da2c0bccba1",
+      "name": "Mark Remaining Checkboxes",
+      "type": "n8n-nodes-pdfco.PDFco Api",
+      "typeVersion": 1.1,
+      "position": [
+        1264,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "AHTR Clinical Form": {
+      "main": [
+        [
+          {
+            "node": "Find Funding Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Funding Profile": {
+      "main": [
+        [
+          {
+            "node": "Profile Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Profile Found?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Patient Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim Not Found Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Treatment History": {
+      "main": [
+        [
+          {
+            "node": "Assemble AHTR Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AHTR Approval Form": {
+      "main": [
+        [
+          {
+            "node": "Apply New Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply New Approval": {
+      "main": [
+        [
+          {
+            "node": "Confirm Approval Recorded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email AHTR to Insurer": {
+      "main": [
+        [
+          {
+            "node": "Update Outcome History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Filled AHTR": {
+      "main": [
+        [
+          {
+            "node": "Email AHTR to Insurer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble AHTR Document": {
+      "main": [
+        [
+          {
+            "node": "Fill Official AHTR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Patient Record": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fee Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fee Schedule": {
+      "main": [
+        [
+          {
+            "node": "Fetch Practitioner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Practitioner": {
+      "main": [
+        [
+          {
+            "node": "Fetch Treatment History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fill Official AHTR": {
+      "main": [
+        [
+          {
+            "node": "Mark Remaining Checkboxes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Remaining Checkboxes": {
+      "main": [
+        [
+          {
+            "node": "Download Filled AHTR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

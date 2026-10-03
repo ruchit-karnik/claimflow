@@ -1,0 +1,819 @@
+{
+  "name": "1) NDIS",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "77276994-35c7-4638-956a-52f3f1f6d664",
+      "name": "Daily 6pm Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "pN4pCZYD7EhG71C3",
+          "cachedResultName": "ndis_participants"
+        },
+        "returnAll": true
+      },
+      "id": "425341f1-a054-4245-b864-693f97c94267",
+      "name": "Fetch NDIS Participants",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "10hHiLMGHWg2PqKa",
+          "cachedResultName": "ndis_price_guide"
+        },
+        "returnAll": true
+      },
+      "id": "3fb604a6-0936-47fb-98b6-8f3c9a20cff5",
+      "name": "Fetch NDIS Price Guide",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "https://api.au5.cliniko.com/v1/invoices",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q[]",
+              "value": "=updated_at:>{{ $today.minus({ days: 1 }).toUTC().toISO({ suppressMilliseconds: true }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aebb309f-404f-4e53-8de3-4cd196ae3e89",
+      "name": "Fetch Cliniko Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "invoices",
+        "options": {}
+      },
+      "id": "49bcfcbb-3af7-4e53-b21d-ba75ba7a3f47",
+      "name": "Split Out Invoices",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst participants = $('Fetch NDIS Participants').all().map(i => i.json);\nconst priceGuide = $('Fetch NDIS Price Guide').all().map(i => i.json);\nconst invoices = $('Split Out Invoices').all().map(i => i.json);\n\nconst priceMap = {};\nfor (const p of priceGuide) { priceMap[String(p.support_item_number).trim()] = p; }\nconst byPatient = {};\nfor (const p of participants) { byPatient[String(p.patient_id).trim()] = p; }\n\n// Claims already in the ledger: anything past failed_validation is final or already batched - never re-process\nconst existingClaims = {};\nfor (const r of $('Fetch Existing Claims').all()) { existingClaims[String(r.json.claim_reference).trim()] = String(r.json.status || ''); }\n\nconst batchId = 'BATCH-' + $today.toFormat('yyyyLLdd');\nconst seen = {};\nconst out = [];\nconst inputs = $input.all();\n\nfor (let idx = 0; idx < inputs.length; idx++) {\n  const resp = inputs[idx].json;\n  const inv = invoices[idx] || resp;\n\n  // Cliniko references the patient as a link URL; fall back to flat fields for other PMSs\n  let patientId = String(inv.patient_id ?? inv.patientId ?? '').trim();\n  if (!patientId && inv.patient && inv.patient.id) patientId = String(inv.patient.id);\n  if (!patientId && inv.patient && inv.patient.links && inv.patient.links.self) {\n    const m = String(inv.patient.links.self).match(/patients\\/(\\d+)/);\n    if (m) patientId = m[1];\n  }\n\n  const invoiceNumber = String(inv.invoice_number ?? inv.number ?? '').trim();\n  const serviceDate = String(inv.service_date ?? inv.issue_date ?? '').slice(0, 10);\n\n  let lines = Array.isArray(resp.invoice_items) ? resp.invoice_items : (Array.isArray(inv.items) ? inv.items : []);\n  if (!lines.length) lines = [inv];\n\n  for (const line of lines) {\n    let supportItem = String(line.support_item_number ?? line.item_code ?? line.code ?? '').trim();\n    if (!supportItem) {\n      const m2 = String((line.name ?? '') + ' ' + (line.description ?? '')).match(/\\d{2}_\\d{3}_\\d{4}_\\d_\\d/);\n      if (m2) supportItem = m2[0];\n    }\n\n    // Lines coded for another funder (e.g. workers comp WCP001) are handled by that funder's workflow\n    if (supportItem && !priceMap[supportItem] && !/^[0-9]{2}_/.test(supportItem)) continue;\n\n    const quantity = Number(line.quantity ?? 1);\n    const unitPrice = Number(line.unit_price ?? line.price ?? inv.total_amount ?? 0);\n    const errors = [];\n\n    const participant = byPatient[patientId];\n    if (!participant) errors.push('No NDIS participant record for patient id \"' + patientId + '\"');\n\n    const ndisNumber = participant ? String(participant.ndis_number ?? '').trim() : '';\n    if (participant && !/^43\\d{7}$/.test(ndisNumber)) errors.push('NDIS number \"' + ndisNumber + '\" is not a valid 9-digit number starting with 43');\n\n    const planType = participant ? String(participant.plan_type ?? '').toLowerCase().trim() : '';\n    if (participant && !['agency', 'plan', 'self'].includes(planType)) errors.push('Unknown plan management type \"' + planType + '\" (expected agency, plan or self)');\n\n    if (participant && serviceDate) {\n      const ps = String(participant.plan_start ?? '').slice(0, 10);\n      const pe = String(participant.plan_end ?? '').slice(0, 10);\n      if (ps && serviceDate < ps) errors.push('Service date ' + serviceDate + ' is before plan start ' + ps);\n      if (pe && serviceDate > pe) errors.push('Service date ' + serviceDate + ' is after plan end ' + pe + ' (plan may have expired)');\n    }\n\n    const priceRow = priceMap[supportItem];\n    if (!supportItem) errors.push('Missing NDIS support item number (set it as the billable item code, or include e.g. 15_055_0128_1_3 in the item name)');\n    else if (!priceRow) errors.push('Support item \"' + supportItem + '\" not found in price guide table');\n    else if (unitPrice > Number(priceRow.price_limit)) errors.push('Unit price $' + unitPrice.toFixed(2) + ' exceeds price limit $' + Number(priceRow.price_limit).toFixed(2) + ' for ' + supportItem);\n\n    if (!(quantity > 0)) errors.push('Quantity must be greater than zero');\n    if (!serviceDate) errors.push('Missing service date');\n\n    const claimRef = (invoiceNumber || 'NOINV') + '-' + (supportItem || 'NOITEM') + '-' + serviceDate;\n\n    // Status protection: skip claims already batched (validated) or final (paid/rejected).\n    // Only failed_validation claims are re-processed, so fixes flow through on the next run.\n    const prior = existingClaims[claimRef];\n    if (prior && prior !== 'failed_validation') continue;\n\n    if (seen[claimRef]) errors.push('Duplicate claim line in this batch: ' + claimRef);\n    seen[claimRef] = true;\n\n    out.push({ json: {\n      claim_reference: claimRef,\n      invoice_number: invoiceNumber,\n      patient_id: patientId,\n      ndis_number: ndisNumber,\n      participant_name: participant ? ((participant.first_name || '') + ' ' + (participant.last_name || '')).trim() : '',\n      support_item_number: supportItem,\n      support_item_name: priceRow ? priceRow.support_item_name : '',\n      service_date: serviceDate,\n      quantity: quantity,\n      unit_price: unitPrice,\n      total: Math.round(quantity * unitPrice * 100) / 100,\n      gst_code: priceRow && priceRow.gst_code ? priceRow.gst_code : 'P2',\n      plan_type: planType,\n      plan_manager_email: participant ? (participant.plan_manager_email || '') : '',\n      participant_email: participant ? (participant.participant_email || '') : '',\n      status: errors.length ? 'failed_validation' : 'validated',\n      validation_errors: errors.join('; '),\n      batch_id: batchId,\n      funder: 'ndis'\n    }});\n  }\n}\nreturn out;\n"
+      },
+      "id": "aad29a4a-b56d-4699-b1d1-2a62f2f6adb7",
+      "name": "Validate NDIS Claims",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "keyValue": "={{ $json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "claim_reference": "={{ $json.claim_reference }}",
+            "invoice_number": "={{ $json.invoice_number }}",
+            "patient_id": "={{ $json.patient_id }}",
+            "ndis_number": "={{ $json.ndis_number }}",
+            "participant_name": "={{ $json.participant_name }}",
+            "support_item_number": "={{ $json.support_item_number }}",
+            "service_date": "={{ $json.service_date }}",
+            "quantity": "={{ $json.quantity }}",
+            "unit_price": "={{ $json.unit_price }}",
+            "total": "={{ $json.total }}",
+            "plan_type": "={{ $json.plan_type }}",
+            "status": "={{ $json.status }}",
+            "validation_errors": "={{ $json.validation_errors }}",
+            "batch_id": "={{ $json.batch_id }}",
+            "funder": "={{ $json.funder }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "dce09728-3392-495f-8a9b-fa31b5e5aaae",
+      "name": "Save to Claims Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate NDIS Claims').item.json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "failed_validation"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Invalid"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate NDIS Claims').item.json.plan_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "agency"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Agency (PACE CSV)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate NDIS Claims').item.json.plan_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "plan"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Plan-managed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate NDIS Claims').item.json.plan_type }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "self"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Self-managed"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "ignoreCase": true,
+          "renameFallbackOutput": "Manual Review"
+        }
+      },
+      "id": "579c7aab-d057-4a10-b349-97348e811d02",
+      "name": "Route Claims",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst failed = $('Validate NDIS Claims').all().map(i => i.json).filter(c => c.status === 'failed_validation');\nlet rows = '';\nfor (const c of failed) {\n  rows += '<tr><td>' + c.claim_reference + '</td><td>' + (c.participant_name || 'Unknown') + '</td><td>' + c.validation_errors + '</td></tr>';\n}\nconst html = '<h2>NDIS claims failing validation (' + failed.length + ')</h2>' +\n  '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">' +\n  '<tr><th>Claim</th><th>Participant</th><th>Problems</th></tr>' + rows + '</table>' +\n  '<p>Fix these in the practice management system, or in the ndis_participants / ndis_price_guide data tables in n8n, then re-run the workflow. Nothing invalid was included in a claim batch.</p>';\nreturn [{ json: { html: html, count: failed.length } }];\n"
+      },
+      "id": "db3f8029-dcab-4a57-b0b8-542648da5391",
+      "name": "Build Error Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        -80
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS claims: {{ $json.count }} failed validation",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3ecbfdcf-563d-4895-8849-8e457909711d",
+      "name": "Email Error Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2272,
+        -80
+      ],
+      "webhookId": "e5d65e06-24c6-47fc-a808-81658a23ef51"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a01",
+              "name": "RegistrationNumber",
+              "type": "string",
+              "value": "4050000000"
+            },
+            {
+              "id": "a02",
+              "name": "NDISNumber",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.ndis_number }}"
+            },
+            {
+              "id": "a03",
+              "name": "SupportsDeliveredFrom",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.service_date.replaceAll('-', '/') }}"
+            },
+            {
+              "id": "a04",
+              "name": "SupportsDeliveredTo",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.service_date.replaceAll('-', '/') }}"
+            },
+            {
+              "id": "a05",
+              "name": "SupportNumber",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.support_item_number }}"
+            },
+            {
+              "id": "a06",
+              "name": "ClaimReference",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.claim_reference }}"
+            },
+            {
+              "id": "a07",
+              "name": "Quantity",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.quantity }}"
+            },
+            {
+              "id": "a08",
+              "name": "Hours",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a09",
+              "name": "UnitPrice",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.unit_price }}"
+            },
+            {
+              "id": "a10",
+              "name": "GSTCode",
+              "type": "string",
+              "value": "={{ $('Validate NDIS Claims').item.json.gst_code }}"
+            },
+            {
+              "id": "a11",
+              "name": "AuthorisedBy",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a12",
+              "name": "ParticipantApproved",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a13",
+              "name": "InKindFundingProgramCode",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a14",
+              "name": "ClaimType",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a15",
+              "name": "CancellationReason",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "a16",
+              "name": "ABN",
+              "type": "string",
+              "value": "<__PLACEHOLDER_VALUE__Your provider ABN (11 digits, no spaces)__>"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "29f06640-b983-48ed-a167-573b574c6832",
+      "name": "Map PACE Columns",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2048,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "fileName": "=NDIS_bulk_claims_{{ $today.toFormat(\"yyyyLLdd\") }}.csv",
+          "headerRow": true
+        }
+      },
+      "id": "a3b2b672-11f4-4374-8966-49f05e1b6b02",
+      "name": "Create Bulk Claim CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2272,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS bulk payment request ready — {{ $today.toFormat(\"d LLL yyyy\") }}",
+        "message": "<p>Attached is today's NDIS bulk payment request CSV for agency-managed participants.</p><p>All rows passed validation (NDIS number format, support item codes, price caps, plan dates, duplicates). Upload the file to the myplace provider portal / PACE via PRODA.</p>",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "id": "19d56176-37cd-42cd-847c-15b56bf72295",
+      "name": "Email Bulk CSV to Admin",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2480,
+        144
+      ],
+      "webhookId": "86afc1b4-c107-41d9-9bb6-229a458b74c5"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Validate NDIS Claims').item.json.plan_manager_email }}",
+        "subject": "=NDIS claim {{ $('Validate NDIS Claims').item.json.invoice_number }} — {{ $('Validate NDIS Claims').item.json.participant_name }}",
+        "message": "=<p>Please find below the claim details for {{ $('Validate NDIS Claims').item.json.participant_name }} (NDIS number {{ $('Validate NDIS Claims').item.json.ndis_number }}).</p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Invoice</th><td>{{ $('Validate NDIS Claims').item.json.invoice_number }}</td></tr><tr><th>Support item</th><td>{{ $('Validate NDIS Claims').item.json.support_item_number }} — {{ $('Validate NDIS Claims').item.json.support_item_name }}</td></tr><tr><th>Service date</th><td>{{ $('Validate NDIS Claims').item.json.service_date }}</td></tr><tr><th>Quantity</th><td>{{ $('Validate NDIS Claims').item.json.quantity }}</td></tr><tr><th>Unit price</th><td>${{ $('Validate NDIS Claims').item.json.unit_price }}</td></tr><tr><th>Total</th><td>${{ $('Validate NDIS Claims').item.json.total }}</td></tr></table><p>Please remit payment within your standard terms.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3a0a6526-8b86-43ea-ab1f-ccc7f28ba1a2",
+      "name": "Email Plan Manager Invoice",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2048,
+        384
+      ],
+      "webhookId": "68e3e2ab-b3bf-4940-8c07-47d5e453b903",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Validate NDIS Claims').item.json.participant_email }}",
+        "subject": "=Your NDIS service invoice {{ $('Validate NDIS Claims').item.json.invoice_number }}",
+        "message": "=<p>Hi {{ $('Validate NDIS Claims').item.json.participant_name }},</p><p>Here are the details of your recent service, for claiming against your self-managed NDIS plan:</p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Invoice</th><td>{{ $('Validate NDIS Claims').item.json.invoice_number }}</td></tr><tr><th>Support item</th><td>{{ $('Validate NDIS Claims').item.json.support_item_number }} — {{ $('Validate NDIS Claims').item.json.support_item_name }}</td></tr><tr><th>Service date</th><td>{{ $('Validate NDIS Claims').item.json.service_date }}</td></tr><tr><th>Total</th><td>${{ $('Validate NDIS Claims').item.json.total }}</td></tr></table>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2f08f390-7dda-4c1d-90c4-2c8919d92be6",
+      "name": "Email Participant Invoice",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2048,
+        560
+      ],
+      "webhookId": "c88018a3-fff1-415f-88f7-548efe48026d",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=NDIS claim needs manual review: {{ $('Validate NDIS Claims').item.json.claim_reference }}",
+        "message": "=<p>Claim {{ $('Validate NDIS Claims').item.json.claim_reference }} for {{ $('Validate NDIS Claims').item.json.participant_name }} passed validation but has an unrecognised plan management type (\"{{ $('Validate NDIS Claims').item.json.plan_type }}\"), so it was not routed automatically. Please review it in the ndis_claims_ledger data table.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "30faa28c-37c6-4b6c-bd61-cc4d4f16395b",
+      "name": "Notify Manual Review",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2048,
+        752
+      ],
+      "webhookId": "51b9c92d-61ac-4fd9-8eb6-a9595281468a",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## NDIS Claims — Phase 1: Intake & Validation\n\n**What it does (daily 6pm):** pulls yesterday's invoices from the practice management system, validates every claim line against the participant registry and NDIS price guide, writes everything to the claims ledger, then routes: agency-managed → bulk payment request CSV (emailed, ready for PRODA/myplace upload) · plan-managed → invoice email to plan manager · self-managed → invoice email to participant · failures → error report email.\n\n**Setup checklist**\n1. Connect the Cliniko API credential (API key as Basic auth username) and set the invoices URL for your shard.\n2. Connect the Gmail account used to send emails.\n3. Fill the claims admin email + provider registration number placeholders.\n4. Replace the seeded ndis_price_guide rows with current NDIS Pricing Arrangements prices, and replace the SAMPLE participants in ndis_participants with real data.\n5. Using a different PMS? Only 'Fetch Cliniko Invoices' and the field-mapping lines at the top of 'Validate NDIS Claims' need changing.",
+        "color": 4
+      },
+      "id": "e6f31944-7175-42ad-99f9-1b82e41afe64",
+      "name": "Sticky Note 4e1fa8d8",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Reference data\nParticipant registry + price guide live in n8n Data Tables. Keep them current — validation uses them to catch bad NDIS numbers, expired plans, wrong item codes and price-cap breaches before anything is claimed."
+      },
+      "id": "bb13037a-334c-483e-a17b-d730b066e892",
+      "name": "Sticky Note 598ff24e",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Agency-managed path\nProduces the NDIA bulk payment request CSV. The portal upload itself stays manual (no public NDIA claims API) — everything before it is automated."
+      },
+      "id": "cd9af254-f132-4b4b-bbc3-700ac99bcb21",
+      "name": "Sticky Note 341368ab",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        256,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.invoice_items?.links?.self ?? 'https://api.au5.cliniko.com/v1/invoices/' + $json.id + '/invoice_items' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "78b4c6b9-4e21-4284-a48d-c3f967e06ef8",
+      "name": "Fetch Invoice Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "returnAll": true
+      },
+      "id": "cb0e3c09-6ae0-4b75-9794-3b350bf2e547",
+      "name": "Fetch Existing Claims",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        144
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 6pm Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch NDIS Participants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch NDIS Participants": {
+      "main": [
+        [
+          {
+            "node": "Fetch NDIS Price Guide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Cliniko Invoices": {
+      "main": [
+        [
+          {
+            "node": "Split Out Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate NDIS Claims": {
+      "main": [
+        [
+          {
+            "node": "Save to Claims Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Claims Ledger": {
+      "main": [
+        [
+          {
+            "node": "Route Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Claims": {
+      "main": [
+        [
+          {
+            "node": "Build Error Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Map PACE Columns",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Plan Manager Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email Participant Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Error Report": {
+      "main": [
+        [
+          {
+            "node": "Email Error Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map PACE Columns": {
+      "main": [
+        [
+          {
+            "node": "Create Bulk Claim CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Bulk Claim CSV": {
+      "main": [
+        [
+          {
+            "node": "Email Bulk CSV to Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Invoices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Invoice Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Invoice Items": {
+      "main": [
+        [
+          {
+            "node": "Validate NDIS Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch NDIS Price Guide": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing Claims": {
+      "main": [
+        [
+          {
+            "node": "Fetch Cliniko Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true
+  }
+}

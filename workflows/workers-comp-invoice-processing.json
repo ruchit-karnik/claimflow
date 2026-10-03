@@ -1,0 +1,545 @@
+{
+  "name": "2.2) Invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "7dbbb12b-c44e-4992-b7e7-7c70abba8db9",
+      "name": "Daily Evening Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "returnAll": true
+      },
+      "id": "78b886c7-649d-4ea7-bbf8-22f06e906319",
+      "name": "Fetch Funding Profiles",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gDJPrFlRPD3ZxDZx",
+          "cachedResultName": "insurer_fee_schedule"
+        },
+        "returnAll": true
+      },
+      "id": "f2752e78-ef42-401f-830f-4deb454914f4",
+      "name": "Fetch Insurer Fee Schedule",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "https://api.au5.cliniko.com/v1/invoices",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q[]",
+              "value": "=updated_at:>{{ $today.minus({ days: 1 }).toUTC().toISO({ suppressMilliseconds: true }) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9bfbead4-53eb-4504-b6b2-53fbc8870337",
+      "name": "Fetch Cliniko Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "invoices",
+        "options": {}
+      },
+      "id": "6553e052-0918-4bb8-b317-23a741baa610",
+      "name": "Split Out Invoices",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        880,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.invoice_items?.links?.self ?? 'https://api.au5.cliniko.com/v1/invoices/' + $json.id + '/invoice_items' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c081668b-1161-453b-8141-8f291d4a67ac",
+      "name": "Fetch Invoice Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst profiles = $('Fetch Funding Profiles').all().map(i => i.json);\nconst fees = $('Fetch Insurer Fee Schedule').all().map(i => i.json);\nconst invoices = $('Split Out Invoices').all().map(i => i.json);\n\n// Claims already in the ledger: pending_review and failed_validation re-validate on each run; anything submitted or final never re-processes\nconst existingClaims = {};\nfor (const r of $('Fetch Existing WC Claims').all()) { if (r.json && r.json.claim_reference) existingClaims[String(r.json.claim_reference).trim()] = String(r.json.status || ''); }\n\nconst feeMap = {};\nfor (const f of fees) { feeMap[String(f.item_code).trim().toUpperCase()] = f; }\nconst profByPatient = {};\nfor (const p of profiles) {\n  if (String(p.active).toLowerCase() === 'yes') profByPatient[String(p.patient_id).trim()] = p;\n}\n\nconst batchId = 'WC-' + $today.toFormat('yyyyLLdd');\nconst seen = {};\nconst tallyUsed = {};\nconst out = [];\nconst inputs = $input.all();\n\nfor (let idx = 0; idx < inputs.length; idx++) {\n  const resp = inputs[idx].json;\n  const inv = invoices[idx] || resp;\n\n  let patientId = String(inv.patient_id ?? inv.patientId ?? '').trim();\n  if (!patientId && inv.patient && inv.patient.id) patientId = String(inv.patient.id);\n  if (!patientId && inv.patient && inv.patient.links && inv.patient.links.self) {\n    const m = String(inv.patient.links.self).match(/patients[/]([0-9]+)/);\n    if (m) patientId = m[1];\n  }\n\n  const invoiceNumber = String(inv.invoice_number ?? inv.number ?? '').trim();\n  const serviceDate = String(inv.service_date ?? inv.issue_date ?? '').slice(0, 10);\n\n  let lines = Array.isArray(resp.invoice_items) ? resp.invoice_items : (Array.isArray(inv.items) ? inv.items : []);\n  if (!lines.length) lines = [inv];\n\n  for (const line of lines) {\n    let code = String(line.item_code ?? line.code ?? '').trim().toUpperCase();\n    if (!code || !feeMap[code]) {\n      const m2 = String((line.name ?? '') + ' ' + (line.description ?? '')).toUpperCase().match(/[A-Z]{2,4}[0-9]{3}/);\n      if (m2 && feeMap[m2[0]]) code = m2[0];\n    }\n\n    // Only lines coded with an insurer fee-schedule item belong to this workflow\n    if (!code || !feeMap[code]) continue;\n\n    const fee = feeMap[code];\n    const quantity = Number(line.quantity ?? 1) || 1;\n    const unitPrice = Number(line.unit_price ?? line.price ?? 0);\n    const errors = [];\n\n    const profile = profByPatient[patientId];\n    if (!profile) errors.push('No active workers comp / CTP funding profile for patient id \"' + patientId + '\"');\n\n    if (profile && !String(profile.claim_number ?? '').trim()) errors.push('Funding profile has no insurer claim number');\n    if (profile && !String(profile.approval_reference ?? '').trim()) errors.push('No treatment approval (AHTR) reference on file');\n\n    if (profile && serviceDate) {\n      const exp = String(profile.approval_expiry ?? '').slice(0, 10);\n      if (exp && serviceDate > exp) errors.push('Service date ' + serviceDate + ' is after approval expiry ' + exp + ' (submit a new AHTR)');\n    }\n\n    const approved = profile ? (Number(profile.sessions_approved) || 0) : 0;\n    const usedBase = profile ? (Number(profile.sessions_used) || 0) : 0;\n    const usedTally = tallyUsed[patientId] || 0;\n    const remainingBefore = approved - usedBase - usedTally;\n    if (profile && remainingBefore < quantity) errors.push('Only ' + Math.max(0, remainingBefore) + ' approved sessions remaining under ' + (profile.approval_reference || 'the current approval') + ' (submit a new AHTR before treating)');\n\n    if (unitPrice > Number(fee.rate)) errors.push('Unit price $' + unitPrice.toFixed(2) + ' exceeds the gazetted rate $' + Number(fee.rate).toFixed(2) + ' for ' + code);\n    if (!(quantity > 0)) errors.push('Quantity must be greater than zero');\n    if (!serviceDate) errors.push('Missing service date');\n\n    const claimRef = (invoiceNumber || 'NOINV') + '-' + code + '-' + serviceDate;\n\n    // Status protection: skip claims already submitted, rejected or paid so they are never re-staged or re-sent\n    const prior = existingClaims[claimRef];\n    if (prior && prior !== 'failed_validation' && prior !== 'pending_review') continue;\n\n    if (seen[claimRef]) errors.push('Duplicate claim line in this batch: ' + claimRef);\n    seen[claimRef] = true;\n\n    const valid = errors.length === 0;\n    if (valid) tallyUsed[patientId] = usedTally + quantity;\n\n    const usedNew = usedBase + (tallyUsed[patientId] || usedTally);\n    const remainingAfter = approved - usedNew;\n\n    out.push({ json: {\n      claim_reference: claimRef,\n      invoice_number: invoiceNumber,\n      patient_id: patientId,\n      participant_name: profile ? (profile.patient_name || '') : '',\n      support_item_number: code,\n      support_item_name: fee.item_name || '',\n      service_date: serviceDate,\n      quantity: quantity,\n      unit_price: unitPrice,\n      total: Math.round(quantity * unitPrice * 100) / 100,\n      funder: profile ? profile.funder : 'workers_comp',\n      insurer_name: profile ? (profile.insurer_name || '') : '',\n      insurer_email: profile ? (profile.insurer_email || '') : '',\n      claim_number: profile ? (profile.claim_number || '') : '',\n      approval_reference: profile ? (profile.approval_reference || '') : '',\n      sessions_used_new: valid ? usedNew : usedBase,\n      remaining_after: valid ? remainingAfter : (approved - usedBase),\n      status: valid ? 'pending_review' : 'failed_validation',\n      validation_errors: errors.join('; '),\n      batch_id: batchId\n    }});\n  }\n}\nreturn out;\n"
+      },
+      "id": "d38e3b4a-eab2-44fd-9c01-704ccfc4d90c",
+      "name": "Validate WC Claims",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "keyValue": "={{ $json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "claim_reference": "={{ $json.claim_reference }}",
+            "invoice_number": "={{ $json.invoice_number }}",
+            "patient_id": "={{ $json.patient_id }}",
+            "participant_name": "={{ $json.participant_name }}",
+            "support_item_number": "={{ $json.support_item_number }}",
+            "service_date": "={{ $json.service_date }}",
+            "quantity": "={{ $json.quantity }}",
+            "unit_price": "={{ $json.unit_price }}",
+            "total": "={{ $json.total }}",
+            "plan_type": "={{ $json.funder }}",
+            "funder": "={{ $json.funder }}",
+            "status": "={{ $json.status }}",
+            "validation_errors": "={{ $json.validation_errors }}",
+            "batch_id": "={{ $json.batch_id }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "55d814fc-2cde-4b1f-8dbd-ef5d078156a5",
+      "name": "Save to Claims Ledger",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate WC Claims').item.json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "failed_validation"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Invalid"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Validate WC Claims').item.json.status }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "pending_review"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Pending Review"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "ignoreCase": true,
+          "renameFallbackOutput": "Manual Review"
+        }
+      },
+      "id": "cc9483e7-fd64-472d-88b8-66d9b11e5749",
+      "name": "Route WC Claims",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst failed = $('Validate WC Claims').all().map(i => i.json).filter(c => c.status === 'failed_validation');\nlet rows = '';\nfor (const c of failed) {\n  rows += '<tr><td>' + c.claim_reference + '</td><td>' + (c.participant_name || 'Unknown') + '</td><td>' + (c.claim_number || '-') + '</td><td>' + c.validation_errors + '</td></tr>';\n}\nconst html = '<h2>Workers comp / CTP claims failing validation (' + failed.length + ')</h2>' +\n  '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">' +\n  '<tr><th>Claim</th><th>Patient</th><th>Insurer claim no.</th><th>Problems</th></tr>' + rows + '</table>' +\n  '<p>Fix the funding profile (claim number, AHTR approval, sessions) in the funding_profiles data table, or correct the invoice in the PMS, then re-run. Nothing invalid was invoiced to an insurer.</p>';\nreturn [{ json: { html: html, count: failed.length } }];\n"
+      },
+      "id": "28fe8715-041a-465e-8548-fa2eb923efc9",
+      "name": "Build WC Error Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        80
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=Workers comp claims: {{ $json.count }} failed validation",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "ed96ea5d-99e4-448d-a051-262d53fd71ba",
+      "name": "Email WC Error Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2272,
+        80
+      ],
+      "webhookId": "edf27cf4-75c0-4820-ada2-3b513bfe1ac3"
+    },
+    {
+      "parameters": {
+        "content": "## Workers Comp / CTP — Intake & Staging (Phase B)\n\nDaily 6:30pm: reads the same Cliniko invoices as the NDIS workflow, but only processes lines coded with insurer fee-schedule items (e.g. WCP002) — NDIS-coded lines are left to the NDIS workflow.\n\nValidates against funding_profiles: active profile, insurer claim number, current AHTR approval (reference + expiry), approved sessions remaining, and gazetted rate cap. Valid claims are STAGED in the ledger as pending_review — nothing is emailed to an insurer from this workflow. A digest email asks the reviewer to open the 2.3) Claims Review dashboard, where each claim gets final verification: approve (invoice emailed to insurer + sessions counted) or reject (reason saved). Claims already submitted / rejected / paid are never re-processed.\n\nFailures → error report email, as before. Keep funding_profiles current and put real SIRA gazetted rates in insurer_fee_schedule.",
+        "color": 2
+      },
+      "id": "0f720a60-daa2-4ab8-81bd-bb5194c2864b",
+      "name": "Sticky Note 03c512c3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -144
+      ]
+    },
+    {
+      "id": "a48c573f-4d6f-4c1b-bbfe-3a8dafe6ef67",
+      "name": "Fetch Existing WC Claims",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        144
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "07d31b91-4a4d-4c60-85c3-0b60f7dab35f",
+      "name": "Build Review Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        320
+      ],
+      "parameters": {
+        "jsCode": "\nconst pend = $('Validate WC Claims').all().map(i => i.json).filter(c => c.status === 'pending_review');\nif (!pend.length) return [];\nlet total = 0;\nfor (const c of pend) total += Number(c.total) || 0;\nconst html = '<h2>' + pend.length + ' workers comp / CTP claim(s) are ready for final review</h2>' +\n  '<p>Total value: $' + total.toFixed(2) + '. Nothing has been sent to any insurer yet.</p>' +\n  '<p>Review each claim and approve or reject it on the dashboard:</p>' +\n  '<p><a href=\"https://YOUR_N8N_INSTANCE/webhook/claims-review\">Open the claims review dashboard</a></p>' +\n  '<p style=\"color:#888;font-size:12px\">The link works once the 2.3) Claims Review workflow is published.</p>';\nreturn [{ json: { html: html, count: pend.length, total: total } }];\n"
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "1b91c243-539f-47b6-b310-37bdec80eff7",
+      "name": "Email Review Request",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2272,
+        320
+      ],
+      "parameters": {
+        "sendTo": "admin@example.com",
+        "subject": "=Claims review needed: {{ $json.count }} claim(s) awaiting approval before insurer submission",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "535cd4c5-ba79-4961-8bcd-1db54a9e1e4b"
+    }
+  ],
+  "connections": {
+    "Fetch Funding Profiles": {
+      "main": [
+        [
+          {
+            "node": "Fetch Insurer Fee Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Cliniko Invoices": {
+      "main": [
+        [
+          {
+            "node": "Split Out Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Invoices": {
+      "main": [
+        [
+          {
+            "node": "Fetch Invoice Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Invoice Items": {
+      "main": [
+        [
+          {
+            "node": "Validate WC Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate WC Claims": {
+      "main": [
+        [
+          {
+            "node": "Save to Claims Ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Claims Ledger": {
+      "main": [
+        [
+          {
+            "node": "Route WC Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route WC Claims": {
+      "main": [
+        [
+          {
+            "node": "Build WC Error Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Review Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build WC Error Report": {
+      "main": [
+        [
+          {
+            "node": "Email WC Error Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Evening Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Funding Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Insurer Fee Schedule": {
+      "main": [
+        [
+          {
+            "node": "Fetch Existing WC Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Existing WC Claims": {
+      "main": [
+        [
+          {
+            "node": "Fetch Cliniko Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Digest": {
+      "main": [
+        [
+          {
+            "node": "Email Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "timezone": "Australia/Sydney",
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Daily Evening Trigger": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

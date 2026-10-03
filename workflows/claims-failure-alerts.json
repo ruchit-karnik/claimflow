@@ -1,0 +1,76 @@
+{
+  "name": "Claims — Failure Alerts",
+  "nodes": [
+    {
+      "id": "a7cdb896-af34-47de-9b1d-fa6147fee999",
+      "name": "On Workflow Failure",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "606ca714-be83-4892-9007-9eb880998a2e",
+      "name": "Email Failure Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=Claims automation FAILED: {{ $json.workflow.name }}",
+        "emailType": "html",
+        "message": "=<h2>A claims workflow failed and needs attention</h2><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\"><tr><th>Workflow</th><td>{{ $json.workflow.name }}</td></tr><tr><th>Failed node</th><td>{{ $json.execution.error?.node?.name ?? $json.execution.lastNodeExecuted }}</td></tr><tr><th>Error</th><td>{{ $json.execution.error?.message }}</td></tr><tr><th>Execution</th><td><a href=\"{{ $json.execution.url }}\">{{ $json.execution.id }}</a></td></tr><tr><th>Mode</th><td>{{ $json.execution.mode }}</td></tr></table><p>No claims were lost: runs are idempotent, and claims already paid or rejected are protected from re-processing. Fix the cause (common ones: Cliniko API key expired, Gmail token needs re-connecting), then simply re-run the workflow.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "b1b67d29-f76f-40fe-86ef-085462cbecaa"
+    },
+    {
+      "id": "51ff8559-67fe-47cf-9166-4808bb23b77f",
+      "name": "Sticky Note bff3d301",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ],
+      "parameters": {
+        "content": "## Failure Alerts\n\nThis workflow runs automatically whenever any claims workflow fails in production (it is set as the error workflow on all of them). It emails the admin the workflow name, failed node, error message, and a link to the execution. It does not need to be published — n8n invokes error workflows directly.",
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Failure": {
+      "main": [
+        [
+          {
+            "node": "Email Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

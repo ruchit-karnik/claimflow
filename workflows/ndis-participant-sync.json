@@ -1,0 +1,225 @@
+{
+  "name": "NDIS Participant Sync",
+  "nodes": [
+    {
+      "id": "0d60d077-1475-4bd0-823e-c197fb92b072",
+      "name": "Run Sync",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f290355a-16fb-4db0-bdce-08b4e6fffbbd",
+      "name": "Fetch Cliniko Patients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.au5.cliniko.com/v1/patients",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "per_page",
+              "value": "100"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n NDIS claims automation"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.body.links.next }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.links.next }}",
+              "requestInterval": 300
+            }
+          }
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "f859b405-8e73-4418-8069-951bac154cea",
+      "name": "Build Participant Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst out = [];\nlet seq = 0;\n\nfor (const item of $input.all()) {\n  const patients = Array.isArray(item.json.patients) ? item.json.patients : [];\n  for (const p of patients) {\n    const blob = JSON.stringify(p).toLowerCase();\n\n    // Detect NDIS plan management type from any text field on the patient\n    let planType = '';\n    if (blob.includes('plan-managed') || blob.includes('plan managed')) planType = 'plan';\n    else if (blob.includes('self-managed') || blob.includes('self managed')) planType = 'self';\n    else if (blob.includes('ndia')) planType = 'agency';\n\n    // Patients with no NDIS marker are not NDIS participants - skip them\n    if (!planType) continue;\n\n    // Plan manager email if one is present anywhere on the record\n    const pmMatch = blob.match(/planmanager[0-9]+@[a-z0-9.-]+/);\n    const pmEmail = pmMatch ? pmMatch[0] : '';\n\n    // Synthetic NDIS number for test records: 43 + last 7 digits of the reference number\n    seq++;\n    const digits = String(p.reference_number ?? '').replace(/[^0-9]/g, '');\n    const tail = (digits || String(seq)).slice(-7).padStart(7, '0');\n\n    out.push({ json: {\n      patient_id: String(p.id),\n      first_name: p.first_name || '',\n      last_name: p.last_name || '',\n      ndis_number: '43' + tail,\n      plan_type: planType,\n      plan_start: '2026-01-01',\n      plan_end: '2027-12-31',\n      plan_manager_email: pmEmail,\n      participant_email: p.email || ''\n    }});\n  }\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "44bca701-9241-4d4c-882f-8cba38ecd0f8",
+      "name": "Upsert Participant",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "pN4pCZYD7EhG71C3",
+          "cachedResultName": "ndis_participants"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.patient_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "patient_id"
+          ],
+          "schema": [],
+          "value": {
+            "patient_id": "={{ $json.patient_id }}",
+            "first_name": "={{ $json.first_name }}",
+            "last_name": "={{ $json.last_name }}",
+            "ndis_number": "={{ $json.ndis_number }}",
+            "plan_type": "={{ $json.plan_type }}",
+            "plan_start": "={{ $json.plan_start }}",
+            "plan_end": "={{ $json.plan_end }}",
+            "plan_manager_email": "={{ $json.plan_manager_email }}",
+            "participant_email": "={{ $json.participant_email }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "b42a5a36-a40c-4ac2-9761-c533eab2b85c",
+      "name": "Email Sync Summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=Participant sync complete: {{ $('Build Participant Rows').all().length }} NDIS participants",
+        "emailType": "html",
+        "message": "=<p>The Cliniko → ndis_participants sync has finished.</p><p><b>{{ $('Build Participant Rows').all().length }}</b> NDIS participants are now in the registry (created or updated; patients with no NDIS marker were skipped).</p><p>Test records were given synthetic NDIS numbers (43 + reference number) and plan dates 2026-01-01 to 2027-12-31. Replace these with real values before production claiming.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "executeOnce": true,
+      "webhookId": "e19b2ea4-cb7e-4c58-b20b-9b0e129be68b"
+    },
+    {
+      "id": "0cfef601-4ba6-44f1-bae7-4553851558bb",
+      "name": "Sticky Note 2cdbe0cb",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ],
+      "parameters": {
+        "content": "## Participant Sync (run on demand)\n\nPulls every patient from Cliniko (paginated), detects NDIS plan management type from the patient's text fields (plan-managed / self-managed / NDIA), and upserts them into ndis_participants keyed by Cliniko patient id — safe to re-run any time; existing rows are updated, not duplicated.\n\nTest records get synthetic NDIS numbers (43 + reference number digits) and plan dates 2026-01-01 → 2027-12-31. With real patients, fill true NDIS numbers and plan dates in the data table — this sync fills the structure, the clinic owns the truth.",
+        "color": 6
+      }
+    }
+  ],
+  "connections": {
+    "Run Sync": {
+      "main": [
+        [
+          {
+            "node": "Fetch Cliniko Patients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Cliniko Patients": {
+      "main": [
+        [
+          {
+            "node": "Build Participant Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Participant Rows": {
+      "main": [
+        [
+          {
+            "node": "Upsert Participant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Participant": {
+      "main": [
+        [
+          {
+            "node": "Email Sync Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

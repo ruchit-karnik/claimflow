@@ -1,0 +1,730 @@
+{
+  "name": "2.3) Claims Review",
+  "nodes": [
+    {
+      "id": "0bf3a3d6-84e4-4ebd-9e53-8532bfd92694",
+      "name": "Sticky Note c8b139c5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {
+        "content": "## 2.3) Claims Review — final verification before insurer submission\n\nHuman-in-the-loop gate for workers comp / CTP claims. 2.2) Invoice validates claims and stages them in the ledger as pending_review — nothing is emailed to an insurer until it is approved here.\n\nGET /claims-review serves the review dashboard (claim details, destination insurer email, sessions remaining, warnings). Approve & send emails the tax invoice to the insurer, marks the claim submitted and counts up sessions_used on the funding profile. Reject records the reason in the ledger.\n\nPublish this workflow to activate the production URL: <your-instance>/webhook/claims-review",
+        "color": 3
+      }
+    },
+    {
+      "id": "8384d388-f334-4600-9b02-956d1090d8d6",
+      "name": "Sticky Note 0329542f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        560
+      ],
+      "parameters": {
+        "content": "## Decision handling\n\nThe dashboard posts JSON to the same path: { action: approve | reject | approve_all, claim_reference, reason }. Claims with no active funding profile or no insurer email cannot be approved (approve_all skips them). Patients left with 2 or fewer approved sessions after sending trigger the AHTR renewal alert email.",
+        "color": 5
+      }
+    },
+    {
+      "id": "cd7adc9c-d3d1-4086-a3e4-8a8463766c55",
+      "name": "Open Dashboard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "claims-review",
+        "responseMode": "responseNode",
+        "options": {
+          "ignoreBots": true
+        }
+      },
+      "webhookId": "b7476b0d-f1bb-43e4-933d-3e2220a43a45"
+    },
+    {
+      "id": "9400b43b-7367-4416-838a-f4cc5ee607b7",
+      "name": "Fetch Pending Claims",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending_review"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "4293f55a-d7c1-4fa6-842a-4558eb378dd3",
+      "name": "Fetch Funding Profiles",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b4aec7d2-0811-44d5-83ae-cb589449d1bd",
+      "name": "Fetch Fee Schedule",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gDJPrFlRPD3ZxDZx",
+          "cachedResultName": "insurer_fee_schedule"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "94e695a4-04e6-43a4-bca6-27570728a51e",
+      "name": "Build Dashboard Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $('Fetch Pending Claims').all().map(i => i.json).filter(r => r && r.claim_reference && String(r.status) === 'pending_review' && String(r.funder || '').toLowerCase() !== 'ndis');\nconst profiles = $('Fetch Funding Profiles').all().map(i => i.json).filter(p => p && p.patient_id);\nconst fees = $('Fetch Fee Schedule').all().map(i => i.json).filter(f => f && f.item_code);\n\nconst profByPatient = {};\nfor (const p of profiles) {\n  if (String(p.active).toLowerCase() === 'yes') profByPatient[String(p.patient_id).trim()] = p;\n}\nconst feeByCode = {};\nfor (const f of fees) feeByCode[String(f.item_code).trim().toUpperCase()] = f;\n\nrows.sort((a, b) => String(a.participant_name || '').localeCompare(String(b.participant_name || '')) || String(a.service_date || '').localeCompare(String(b.service_date || '')));\n\nconst tally = {};\nconst claims = [];\nfor (const r of rows) {\n  const pid = String(r.patient_id || '').trim();\n  const prof = profByPatient[pid];\n  const fee = feeByCode[String(r.support_item_number || '').trim().toUpperCase()];\n  const approved = prof ? (Number(prof.sessions_approved) || 0) : 0;\n  const usedBase = prof ? (Number(prof.sessions_used) || 0) : 0;\n  const priorTally = tally[pid] || 0;\n  const qty = Number(r.quantity) || 0;\n  const remainingBefore = approved - usedBase - priorTally;\n  const remainingAfter = remainingBefore - qty;\n  tally[pid] = priorTally + qty;\n\n  const warnings = [];\n  if (!prof) warnings.push('No active funding profile found for this patient, so approve is disabled.');\n  if (prof && !String(prof.insurer_email || '').trim()) warnings.push('Funding profile has no insurer email, so approve is disabled.');\n  if (prof && !String(prof.claim_number || '').trim()) warnings.push('No insurer claim number on the funding profile.');\n  const exp = prof ? String(prof.approval_expiry || '').slice(0, 10) : '';\n  if (exp && String(r.service_date || '') > exp) warnings.push('Service date is after the approval expiry (' + exp + ').');\n  if (prof && remainingAfter < 0) warnings.push('Not enough approved sessions remaining (' + Math.max(0, remainingBefore) + ' left under the current approval).');\n  else if (prof && remainingAfter <= 2) warnings.push('Only ' + remainingAfter + ' approved session(s) will remain after this claim. An AHTR renewal is due.');\n  if (String(r.validation_errors || '').trim()) warnings.push('Validation notes: ' + r.validation_errors);\n\n  claims.push({\n    claim_reference: r.claim_reference,\n    invoice_number: r.invoice_number || '',\n    participant_name: r.participant_name || 'Unknown',\n    patient_id: pid,\n    service_date: r.service_date || '',\n    support_item_number: r.support_item_number || '',\n    support_item_name: fee ? (fee.item_name || '') : '',\n    quantity: qty,\n    unit_price: Number(r.unit_price) || 0,\n    total: Number(r.total) || 0,\n    batch_id: r.batch_id || '',\n    funder: r.funder || '',\n    insurer_name: prof ? (prof.insurer_name || '') : '',\n    insurer_email: prof ? (prof.insurer_email || '') : '',\n    claim_number: prof ? (prof.claim_number || '') : '',\n    approval_reference: prof ? (prof.approval_reference || '') : '',\n    approval_expiry: exp,\n    sessions_approved: approved,\n    remaining_after: remainingAfter,\n    can_approve: !!(prof && String(prof.insurer_email || '').trim()),\n    warnings: warnings\n  });\n}\n\nconst payload = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64');\n\nconst html = `<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Claims Review</title>\n<style>\n* { box-sizing: border-box; margin: 0; padding: 0; }\nbody { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: linear-gradient(180deg, #eef2ff 0%, #f6f8fb 340px, #f6f8fb 100%); color: #0f172a; min-height: 100vh; padding: 28px 16px 70px; }\n.wrap { max-width: 860px; margin: 0 auto; }\n.hero { position: relative; overflow: hidden; background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); border-radius: 20px; padding: 30px 32px; color: #fff; box-shadow: 0 12px 30px rgba(79,70,229,.25); display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; align-items: center; }\n.hero::before { content: ''; position: absolute; width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,.12); top: -90px; right: -40px; }\n.hero::after { content: ''; position: absolute; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,.10); bottom: -70px; right: 150px; }\n.hero h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }\n.hero .sub { margin-top: 6px; font-size: 13.5px; color: rgba(255,255,255,.88); max-width: 460px; }\n.hero-actions { display: flex; gap: 10px; position: relative; z-index: 1; flex-wrap: wrap; }\nbutton { font: inherit; cursor: pointer; border: none; border-radius: 10px; font-weight: 600; transition: transform .12s, box-shadow .12s, background .12s; }\n.btn-ghost { background: rgba(255,255,255,.16); color: #fff; padding: 10px 16px; font-size: 13px; border: 1px solid rgba(255,255,255,.35); }\n.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,.28); }\n.btn-white { background: #fff; color: #3730a3; padding: 10px 16px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.18); }\n.btn-white:hover:not(:disabled) { transform: translateY(-1px); }\nbutton:disabled { opacity: .5; cursor: not-allowed; }\n.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 22px 0; }\n.stat { background: #fff; border-radius: 16px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 14px rgba(15,23,42,.06); border: 1px solid #eef1f6; }\n.stat .ico { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }\n.ico-blue { background: #e0e7ff; } .ico-green { background: #dcfce7; } .ico-gold { background: #fef3c7; }\n.stat .num { font-size: 21px; font-weight: 800; line-height: 1.1; }\n.stat .lbl { font-size: 12px; color: #64748b; margin-top: 2px; }\n.card { background: #fff; border-radius: 16px; border: 1px solid #eef1f6; box-shadow: 0 4px 14px rgba(15,23,42,.06); padding: 20px 22px; margin-bottom: 16px; transition: box-shadow .15s, transform .15s; }\n.card:hover { box-shadow: 0 10px 24px rgba(15,23,42,.10); transform: translateY(-1px); }\n.card-head { display: flex; gap: 14px; align-items: center; }\n.avatar { width: 46px; height: 46px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }\n.av0 { background: linear-gradient(135deg, #6366f1, #8b5cf6); }\n.av1 { background: linear-gradient(135deg, #0ea5e9, #2563eb); }\n.av2 { background: linear-gradient(135deg, #14b8a6, #0d9488); }\n.who { flex: 1; min-width: 0; }\n.name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }\n.name { font-size: 16px; font-weight: 700; }\n.badge { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; }\n.badge-wc { background: #dbeafe; color: #1d4ed8; }\n.badge-ctp { background: #ede9fe; color: #6d28d9; }\n.badge-other { background: #f1f5f9; color: #475569; }\n.ref { font-size: 11.5px; color: #94a3b8; font-family: Consolas, Menlo, monospace; margin-top: 2px; overflow-wrap: anywhere; }\n.amount { font-size: 20px; font-weight: 800; white-space: nowrap; }\n.sendto { margin: 14px 0; background: #eef2ff; border: 1px solid #dfe5ff; color: #3730a3; border-radius: 12px; padding: 10px 14px; font-size: 13px; display: flex; gap: 8px; align-items: center; }\n.sendto b { overflow-wrap: anywhere; }\n.card.blocked .sendto { background: #fef2f2; border-color: #fde2e2; color: #991b1b; }\n.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 18px; }\n.fl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #94a3b8; margin-bottom: 2px; }\n.fv { font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }\n.sessions { margin-top: 14px; }\n.bar { height: 7px; background: #eef1f6; border-radius: 99px; overflow: hidden; margin-top: 6px; }\n.bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #22c55e, #16a34a); }\n.bar.low i { background: linear-gradient(90deg, #f59e0b, #d97706); }\n.bar-lbl { font-size: 11.5px; color: #64748b; margin-top: 4px; }\n.warnbox { margin-top: 12px; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 12px; padding: 9px 13px; font-size: 12.5px; display: flex; gap: 8px; }\n.actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }\n.btn-approve { background: linear-gradient(135deg, #22c55e, #15803d); color: #fff; padding: 11px 18px; font-size: 13.5px; box-shadow: 0 4px 12px rgba(22,163,74,.35); }\n.btn-approve:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(22,163,74,.42); }\n.btn-reject { background: #fff; color: #b91c1c; border: 1.5px solid #fecaca; padding: 11px 18px; font-size: 13.5px; }\n.btn-reject:hover:not(:disabled) { background: #fef2f2; }\n.empty { background: #fff; border-radius: 20px; border: 1px solid #eef1f6; box-shadow: 0 4px 14px rgba(15,23,42,.06); padding: 56px 24px; text-align: center; }\n.empty .big { font-size: 52px; }\n.empty h2 { font-size: 18px; margin: 12px 0 6px; }\n.empty p { color: #64748b; font-size: 13.5px; }\n.footnote { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 28px; }\n</style>\n</head>\n<body>\n<div class=\"wrap\">\n<header class=\"hero\">\n  <div>\n    <h1>🗂️ Claims Review</h1>\n    <div class=\"sub\">Final verification before invoices are emailed to insurers — nothing is sent until you approve it.</div>\n  </div>\n  <div class=\"hero-actions\">\n    <button id=\"refreshBtn\" class=\"btn-ghost\">↻ Refresh</button>\n    <button id=\"approveAllBtn\" class=\"btn-white\">✓ Approve all sendable</button>\n  </div>\n</header>\n<div class=\"stats\">\n  <div class=\"stat\"><div class=\"ico ico-blue\">📋</div><div><div class=\"num\" id=\"statCount\">0</div><div class=\"lbl\">Awaiting review</div></div></div>\n  <div class=\"stat\"><div class=\"ico ico-gold\">💵</div><div><div class=\"num\" id=\"statTotal\">$0.00</div><div class=\"lbl\">Total value</div></div></div>\n  <div class=\"stat\"><div class=\"ico ico-green\">✅</div><div><div class=\"num\" id=\"statReady\">0</div><div class=\"lbl\">Ready to send</div></div></div>\n</div>\n<main id=\"cards\"></main>\n<div class=\"footnote\">Approving emails the tax invoice to the insurer, marks the claim submitted in the ledger and counts sessions used · Rejections are saved with your reason</div>\n</div>\n<script id=\"__data\" type=\"application/json\">${payload}</script>\n<script>\nvar claims = [];\ntry { claims = JSON.parse(decodeURIComponent(escape(atob(document.getElementById('__data').textContent.trim())))); } catch (e) { claims = []; }\nfunction esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); }\nfunction money(n) { return '$' + (Number(n) || 0).toFixed(2); }\nfunction field(label, value) { return '<div><div class=\"fl\">' + esc(label) + '</div><div class=\"fv\">' + esc(value) + '</div></div>'; }\nfunction initials(name) {\n  var p = String(name || '').trim().split(' ');\n  var a = p[0] ? p[0].charAt(0) : '?';\n  var b = p.length > 1 ? p[p.length - 1].charAt(0) : '';\n  return (a + b).toUpperCase();\n}\nfunction post(payload) {\n  var buttons = document.querySelectorAll('button');\n  for (var i = 0; i < buttons.length; i++) buttons[i].disabled = true;\n  fetch(window.location.href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })\n    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })\n    .then(function () { window.location.reload(); })\n    .catch(function (e) { alert('Action failed: ' + e + ' - reloading so you can try again.'); window.location.reload(); });\n}\nfunction render() {\n  var sendable = 0; var totalValue = 0;\n  for (var i = 0; i < claims.length; i++) { totalValue += Number(claims[i].total) || 0; if (claims[i].can_approve) sendable++; }\n  document.getElementById('statCount').textContent = claims.length;\n  document.getElementById('statTotal').textContent = money(totalValue);\n  document.getElementById('statReady').textContent = sendable;\n  document.getElementById('approveAllBtn').disabled = !sendable;\n  var out = '';\n  if (!claims.length) {\n    out = '<div class=\"empty\"><div class=\"big\">🎉</div><h2>All clear — nothing to review</h2><p>New claims appear here after the nightly invoice run stages them for your approval.</p></div>';\n  }\n  for (var k = 0; k < claims.length; k++) {\n    var c = claims[k];\n    var badge = c.funder === 'ctp' ? '<span class=\"badge badge-ctp\">CTP</span>' : (c.funder ? '<span class=\"badge badge-wc\">' + esc(c.funder.split('_').join(' ')) + '</span>' : '<span class=\"badge badge-other\">claim</span>');\n    out += '<div class=\"card' + (c.can_approve ? '' : ' blocked') + '\">';\n    out += '<div class=\"card-head\"><div class=\"avatar av' + (k % 3) + '\">' + esc(initials(c.participant_name)) + '</div><div class=\"who\"><div class=\"name-row\"><span class=\"name\">' + esc(c.participant_name) + '</span>' + badge + '</div><div class=\"ref\">' + esc(c.claim_reference) + '</div></div><div class=\"amount\">' + money(c.total) + '</div></div>';\n    out += '<div class=\"sendto\">' + (c.insurer_email ? '✉️ <span>Sends to <b>' + esc(c.insurer_email) + '</b>' + (c.insurer_name ? ' · ' + esc(c.insurer_name) : '') + '</span>' : '🚫 <span>No insurer email on file — this claim cannot be sent yet</span>') + '</div>';\n    out += '<div class=\"grid\">'\n      + field('Insurer claim', c.claim_number || '—')\n      + field('Approval', c.approval_reference || '—')\n      + field('Invoice', c.invoice_number || '—')\n      + field('Service date', c.service_date || '—')\n      + field('Item', c.support_item_number + (c.support_item_name ? ' · ' + c.support_item_name : ''))\n      + field('Qty × unit price', c.quantity + ' × ' + money(c.unit_price))\n      + '</div>';\n    if (c.can_approve && c.sessions_approved > 0) {\n      var usedAfter = c.sessions_approved - c.remaining_after;\n      var pct = Math.round((usedAfter / c.sessions_approved) * 100);\n      if (pct < 0) pct = 0;\n      if (pct > 100) pct = 100;\n      var low = c.remaining_after <= 2;\n      out += '<div class=\"sessions\"><div class=\"fl\">Approved sessions after send</div><div class=\"bar' + (low ? ' low' : '') + '\"><i style=\"width:' + pct + '%\"></i></div><div class=\"bar-lbl\">' + usedAfter + ' of ' + c.sessions_approved + ' used · ' + c.remaining_after + ' left</div></div>';\n    }\n    for (var w = 0; w < c.warnings.length; w++) out += '<div class=\"warnbox\">⚠️ <span>' + esc(c.warnings[w]) + '</span></div>';\n    out += '<div class=\"actions\">'\n      + '<button class=\"btn-approve\" data-act=\"approve\" data-ref=\"' + esc(c.claim_reference) + '\"' + (c.can_approve ? '' : ' disabled') + '>✓ Approve &amp; send</button>'\n      + '<button class=\"btn-reject\" data-act=\"reject\" data-ref=\"' + esc(c.claim_reference) + '\">✕ Reject</button>'\n      + '</div>';\n    out += '</div>';\n  }\n  document.getElementById('cards').innerHTML = out;\n}\ndocument.getElementById('cards').addEventListener('click', function (ev) {\n  var t = ev.target;\n  if (!t || !t.getAttribute) return;\n  var act = t.getAttribute('data-act');\n  var ref = t.getAttribute('data-ref');\n  if (!act || !ref) return;\n  var c = null;\n  for (var i = 0; i < claims.length; i++) if (claims[i].claim_reference === ref) c = claims[i];\n  var NL = String.fromCharCode(10);\n  if (act === 'approve') {\n    var msg = 'Approve and send this invoice now?';\n    if (c) msg = 'Approve and send invoice ' + c.invoice_number + ' for ' + c.participant_name + ' (' + money(c.total) + ')' + NL + 'to ' + c.insurer_email + '?';\n    if (confirm(msg)) post({ action: 'approve', claim_reference: ref });\n  } else if (act === 'reject') {\n    var reason = prompt('Reason for rejecting (saved to the claims ledger):', '');\n    if (reason === null) return;\n    post({ action: 'reject', claim_reference: ref, reason: reason });\n  }\n});\ndocument.getElementById('approveAllBtn').addEventListener('click', function () {\n  var n = 0; var v = 0;\n  for (var i = 0; i < claims.length; i++) if (claims[i].can_approve) { n++; v += Number(claims[i].total) || 0; }\n  if (!n) return;\n  if (confirm('Approve and send ' + n + ' claim(s) totalling ' + money(v) + ' to their insurers?')) post({ action: 'approve_all' });\n});\ndocument.getElementById('refreshBtn').addEventListener('click', function () { window.location.reload(); });\nrender();\n</script>\n</body>\n</html>`;\n\nreturn [{ json: { html: html, pending_count: claims.length } }];"
+      }
+    },
+    {
+      "id": "68a15b29-33d7-4850-bcca-f089885ac10b",
+      "name": "Respond Dashboard",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "23a91244-5186-4f43-82f2-334ac2af1b19",
+      "name": "Claims Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        480
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "claims-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "819059f0-d8ee-49fe-8424-9de66be052f2"
+    },
+    {
+      "id": "eb6f1dc0-f486-404e-8571-5e43cd52fcee",
+      "name": "Load Claims For Action",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        480
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending_review"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "6ccb50d5-462d-4570-af47-9f20e19f6ebf",
+      "name": "Load Profiles For Action",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        480
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "dfffc2e3-194b-45de-959f-d412a41f3b9e",
+      "name": "Apply Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wh = $('Claims Action').first().json;\nconst body = (wh && wh.body) ? wh.body : {};\nconst action = String(body.action || '').toLowerCase();\nconst targetRef = String(body.claim_reference || '').trim();\nconst reason = String(body.reason || '').trim();\n\nconst rows = $('Load Claims For Action').all().map(i => i.json).filter(r => r && r.claim_reference && String(r.status) === 'pending_review' && String(r.funder || '').toLowerCase() !== 'ndis');\nconst profiles = $('Load Profiles For Action').all().map(i => i.json).filter(p => p && p.patient_id);\nconst profByPatient = {};\nfor (const p of profiles) { if (String(p.active).toLowerCase() === 'yes') profByPatient[String(p.patient_id).trim()] = p; }\n\nlet targets = [];\nif (action === 'approve_all') targets = rows;\nelse if (action === 'approve' || action === 'reject') targets = rows.filter(r => String(r.claim_reference) === targetRef);\n\nif (!targets.length) return [{ json: { decision: 'none', message: 'No matching pending claim for action \"' + action + '\"' } }];\n\nconst out = [];\nconst tally = {};\nfor (const r of targets) {\n  if (action === 'reject') {\n    out.push({ json: { decision: 'reject', claim_reference: r.claim_reference, reason: reason || 'Rejected at final review' } });\n    continue;\n  }\n  const pid = String(r.patient_id || '').trim();\n  const prof = profByPatient[pid];\n  const email = prof ? String(prof.insurer_email || '').trim() : '';\n  if (!prof || !email) {\n    if (action === 'approve') return [{ json: { decision: 'none', message: 'Claim has no active funding profile or insurer email, so it cannot be sent' } }];\n    continue;\n  }\n  const approved = Number(prof.sessions_approved) || 0;\n  const usedBase = Number(prof.sessions_used) || 0;\n  const qty = Number(r.quantity) || 0;\n  tally[pid] = (tally[pid] || 0) + qty;\n  const usedNew = usedBase + tally[pid];\n  const remainingAfter = approved - usedNew;\n\n  const emailHtml = '<p>Please find below our tax invoice for approved treatment under claim <b>' + (prof.claim_number || '') + '</b>.</p>' +\n    '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">' +\n    '<tr><th>Worker / claimant</th><td>' + (r.participant_name || '') + '</td></tr>' +\n    '<tr><th>Insurer claim number</th><td>' + (prof.claim_number || '') + '</td></tr>' +\n    '<tr><th>Treatment approval</th><td>' + (prof.approval_reference || '') + '</td></tr>' +\n    '<tr><th>Invoice</th><td>' + (r.invoice_number || '') + '</td></tr>' +\n    '<tr><th>Service</th><td>' + (r.support_item_number || '') + '</td></tr>' +\n    '<tr><th>Service date</th><td>' + (r.service_date || '') + '</td></tr>' +\n    '<tr><th>Quantity</th><td>' + qty + '</td></tr>' +\n    '<tr><th>Amount</th><td>$' + (Number(r.total) || 0).toFixed(2) + '</td></tr></table>' +\n    '<p>Please remit payment within your scheme terms, quoting the invoice number.</p>';\n\n  out.push({ json: {\n    decision: 'approve',\n    claim_reference: r.claim_reference,\n    patient_id: pid,\n    participant_name: r.participant_name || '',\n    invoice_number: r.invoice_number || '',\n    claim_number: prof.claim_number || '',\n    approval_reference: prof.approval_reference || '',\n    insurer_email: email,\n    insurer_name: prof.insurer_name || '',\n    sessions_used_new: usedNew,\n    remaining_after: remainingAfter,\n    email_subject: 'Tax invoice ' + (r.invoice_number || '') + ' — claim ' + (prof.claim_number || '') + ' (' + (r.participant_name || '') + ')',\n    email_html: emailHtml\n  }});\n}\nif (!out.length) return [{ json: { decision: 'none', message: 'No sendable claims (missing insurer emails on funding profiles)' } }];\nreturn out;"
+      }
+    },
+    {
+      "id": "c6f9ed1f-244e-4ad0-9715-03e3dbe43b34",
+      "name": "Route Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        480
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "Approve",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "approve"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "Reject",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "reject"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "No Action",
+          "ignoreCase": true
+        }
+      }
+    },
+    {
+      "id": "6338e650-ad15-4ee3-83e5-5f2583ed7d73",
+      "name": "Email Insurer Invoice",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1140,
+        320
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.insurer_email }}",
+        "subject": "={{ $json.email_subject }}",
+        "message": "={{ $json.email_html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "72bc5e59-4c67-4dcc-a809-f1eeebf543f8"
+    },
+    {
+      "id": "e0821912-ee25-43d1-a7b8-6abc9b939aed",
+      "name": "Mark Claim Submitted",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "condition": "eq",
+              "keyValue": "={{ $('Apply Decision').item.json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "status": "submitted"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "523de5b6-01ef-42eb-9fdd-eb85a09d102e",
+      "name": "Update Profile Sessions",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1580,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EInSxTiVcQZ5S91p",
+          "cachedResultName": "funding_profiles"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "patient_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Apply Decision').item.json.patient_id }}"
+            },
+            {
+              "keyName": "claim_number",
+              "condition": "eq",
+              "keyValue": "={{ $('Apply Decision').item.json.claim_number }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "patient_id"
+          ],
+          "schema": [],
+          "value": {
+            "sessions_used": "={{ $('Apply Decision').item.json.sessions_used_new }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f9abc1c6-a193-415f-bd56-ea64eeb001b9",
+      "name": "Respond Done",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1800,
+        480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": true }",
+        "options": {}
+      }
+    },
+    {
+      "id": "874f9637-f115-4a00-97a1-a2b0dcb24e28",
+      "name": "Build AHTR Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const claims = $('Apply Decision').all().map(i => i.json).filter(c => c.decision === 'approve' && Number(c.remaining_after) <= 2);\nif (!claims.length) return [];\nlet rowsHtml = '';\nfor (const c of claims) {\n  rowsHtml += '<tr><td>' + c.participant_name + '</td><td>' + c.claim_number + '</td><td>' + c.approval_reference + '</td><td>' + c.remaining_after + '</td></tr>';\n}\nconst html = '<h2>AHTR renewals needed</h2>' +\n  '<p>The following patients are nearly out of approved sessions. The practitioner should complete and submit a new Allied Health Treatment Request to the insurer before further treatment.</p>' +\n  '<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">' +\n  '<tr><th>Patient</th><th>Insurer claim</th><th>Current approval</th><th>Sessions left</th></tr>' + rowsHtml + '</table>';\nreturn [{ json: { html: html, count: claims.length } }];"
+      }
+    },
+    {
+      "id": "e4742aaa-8183-426c-8bc1-26a361d1fd0f",
+      "name": "Email AHTR Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        480
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "admin@example.com",
+        "subject": "=AHTR renewals needed for {{ $json.count }} patient(s)",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "fa977189-814d-4113-ba18-65241024e69b"
+    },
+    {
+      "id": "93cc8b4f-c12a-4cb4-94eb-99a81061ff6c",
+      "name": "Mark Claim Rejected",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1140,
+        640
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "EMFKNhToLz6JUFat",
+          "cachedResultName": "ndis_claims_ledger"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "claim_reference",
+              "condition": "eq",
+              "keyValue": "={{ $json.claim_reference }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "claim_reference"
+          ],
+          "schema": [],
+          "value": {
+            "status": "rejected",
+            "rejection_reason": "={{ $json.reason }}"
+          }
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Open Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Claims",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Claims": {
+      "main": [
+        [
+          {
+            "node": "Fetch Funding Profiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Funding Profiles": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fee Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fee Schedule": {
+      "main": [
+        [
+          {
+            "node": "Build Dashboard Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dashboard Page": {
+      "main": [
+        [
+          {
+            "node": "Respond Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claims Action": {
+      "main": [
+        [
+          {
+            "node": "Load Claims For Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Claims For Action": {
+      "main": [
+        [
+          {
+            "node": "Load Profiles For Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Profiles For Action": {
+      "main": [
+        [
+          {
+            "node": "Apply Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Decision": {
+      "main": [
+        [
+          {
+            "node": "Route Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Decision": {
+      "main": [
+        [
+          {
+            "node": "Email Insurer Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Claim Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Insurer Invoice": {
+      "main": [
+        [
+          {
+            "node": "Mark Claim Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Claim Submitted": {
+      "main": [
+        [
+          {
+            "node": "Update Profile Sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Profile Sessions": {
+      "main": [
+        [
+          {
+            "node": "Respond Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Done": {
+      "main": [
+        [
+          {
+            "node": "Build AHTR Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AHTR Alert": {
+      "main": [
+        [
+          {
+            "node": "Email AHTR Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Claim Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

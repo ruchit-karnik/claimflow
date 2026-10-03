@@ -1,0 +1,193 @@
+{
+  "name": "NDIA API Simulator (Mock)",
+  "nodes": [
+    {
+      "id": "bd62566f-668f-4dee-ba98-93dba565dd12",
+      "name": "Receive Payment Requests",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ndia-mock/payment-requests",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson"
+      },
+      "webhookId": "4cc71db4-95c8-44a4-ad7b-bdcaa693290b"
+    },
+    {
+      "id": "e63b15d6-2bd1-42c6-bf39-3350cc9bb05b",
+      "name": "Decide Claim Outcomes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst body = $input.first().json.body || {};\nconst claims = Array.isArray(body.claims) ? body.claims : [];\nconst reasons = [\n  'Participant does not have funding available for this support',\n  'Invalid support item number',\n  'Service date is outside the participant plan period',\n  'Duplicate claim detected'\n];\n\nconst results = [];\nfor (const c of claims) {\n  const num = parseInt(String(c.invoice_number || '').replace(/[^0-9]/g, ''), 10) || 0;\n  // Deterministic mock rule: every 5th invoice number is rejected\n  const rejected = num % 5 === 0;\n  results.push({\n    claim_reference: c.claim_reference,\n    payment_request_number: 'PR-' + (900000 + num),\n    status: rejected ? 'REJECTED' : 'PAID',\n    paid_amount: rejected ? 0 : (Number(c.total) || 0),\n    error_message: rejected ? reasons[num % reasons.length] : ''\n  });\n}\n\nreturn [{ json: { batch_id: body.batch_id || '', received: claims.length, results: results } }];\n"
+      }
+    },
+    {
+      "id": "4e645882-dd7d-455c-89dc-a7d6ef8c00fc",
+      "name": "Sticky Note 9c82ff59",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ],
+      "parameters": {
+        "content": "## NDIA API Simulator (mock)\n\nPlays the role of the NDIA's payment request API for testing the API submission path. Accepts POST { batch_id, claims: [...] } and returns instant per-claim outcomes (the real-time claiming model the NDIA is rolling out). Mock rule: every 5th invoice number is rejected with a realistic reason.\n\nThis whole workflow becomes redundant the day the clinic has real NDIA Digital Partnership Office access — the submission workflow just points at the real endpoint instead.",
+        "color": 3
+      }
+    },
+    {
+      "id": "b3d4863d-4dfc-43fb-9701-a0bcd9606e32",
+      "name": "Serve AHTR Template",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        620
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "ahtr-template",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryBinary",
+        "responseBinaryPropertyName": "data"
+      },
+      "webhookId": "5708677f-9f25-4084-828f-f85fe92d8519"
+    },
+    {
+      "id": "4b7fe55b-0dca-4a44-9479-86f983210e0f",
+      "name": "Load Template Chunks",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        620
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "2Ueq1QxiSmCTB4sL",
+          "cachedResultName": "file_assets"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "name",
+              "condition": "eq",
+              "keyValue": "SIRA-AHTR-form.pdf"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "chunk_index",
+        "orderByDirection": "ASC"
+      }
+    },
+    {
+      "id": "fcf0de4c-0ddd-4d26-8fa2-c98132b723ce",
+      "name": "Rebuild Template B64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        620
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst rows = $input.all().map(i => i.json)\n  .sort((a, b) => Number(a.chunk_index) - Number(b.chunk_index));\n\nif (!rows.length) {\n  throw new Error('AHTR template not loaded - run the AHTR Template Loader first.');\n}\n\nlet b64 = '';\nfor (const r of rows) { b64 += String(r.content_b64 || ''); }\n\nreturn [{ json: { base64: b64 } }];\n"
+      }
+    },
+    {
+      "id": "4bcb884d-879e-4b91-8c26-e819000d4bf8",
+      "name": "Template To Binary",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        620
+      ],
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "base64",
+        "options": {
+          "mimeType": "application/pdf",
+          "fileName": "SIRA-AHTR-form.pdf"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Payment Requests": {
+      "main": [
+        [
+          {
+            "node": "Decide Claim Outcomes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Serve AHTR Template": {
+      "main": [
+        [
+          {
+            "node": "Load Template Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Template Chunks": {
+      "main": [
+        [
+          {
+            "node": "Rebuild Template B64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rebuild Template B64": {
+      "main": [
+        [
+          {
+            "node": "Template To Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}
